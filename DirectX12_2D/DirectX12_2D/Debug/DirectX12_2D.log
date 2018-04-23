@@ -1,0 +1,14 @@
+﻿FXC : warning X4717: Effects deprecated for D3DCompiler_47
+C:\Users\1601271\Documents\GitHub\DirectX12_2D\DirectX12_2D\DirectX12_2D\Shader.hlsl(71,2-20): warning X3206: implicit truncation of vector type
+C:\Users\1601271\Documents\GitHub\DirectX12_2D\DirectX12_2D\DirectX12_2D\Shader.hlsl(72,2-24): warning X3206: implicit truncation of vector type
+C:\Users\1601271\Documents\GitHub\DirectX12_2D\DirectX12_2D\DirectX12_2D\Shader.hlsl(100,2-36): warning X3206: implicit truncation of vector type
+  
+  compilation object save succeeded; see C:\Users\1601271\Documents\GitHub\DirectX12_2D\DirectX12_2D\Debug\Shader.cso
+  Device.cpp
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\um\dinput.h: DIRECTINPUT_VERSION undefined. Defaulting to version 0x0800
+  コードを生成中...
+  コンパイル中...
+  Main.cpp
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\um\dinput.h: DIRECTINPUT_VERSION undefined. Defaulting to version 0x0800
+  コードを生成中...
+  DirectX12_2D.vcxproj -> C:\Users\1601271\Documents\GitHub\DirectX12_2D\DirectX12_2D\Debug\DirectX12_2D.exe
