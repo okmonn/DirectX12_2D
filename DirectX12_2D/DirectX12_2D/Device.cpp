@@ -1,5 +1,11 @@
 #include "Device.h"
+#include "Typedef.h"
+#include <d3dcompiler.h>
 #include <tchar.h>
+
+#pragma comment (lib,"d3d12.lib")
+#pragma comment (lib,"dxgi.lib")
+#pragma comment (lib,"d3dcompiler.lib")
 
 // 機能レベル一覧
 D3D_FEATURE_LEVEL levels[] = 
@@ -28,6 +34,21 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 	//スワップチェイン
 	swap = {};
 
+	//レンダーターゲット
+	render = {};
+
+	//深度ステンシル
+	depth = {};
+
+	//フェンス
+	fen = {};
+
+	//ルートシグネチャ
+	sig = {};
+
+	//パイプライン
+	pipe = {};
+
 
 	//エラーを出力に表示させる
 #ifdef _DEBUG
@@ -47,6 +68,34 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 // デストラクタ
 Device::~Device()
 {
+	if (pipe.vertex != nullptr)
+	{
+		pipe.vertex->Release();
+	}
+	if (pipe.pixel != nullptr)
+	{
+		pipe.pixel->Release();
+	}
+	pipe.pipeline->Release();
+	if (sig.signature != nullptr)
+	{
+		sig.signature->Release();
+	}
+	if (sig.error != nullptr)
+	{
+		sig.error->Release();
+	}
+	sig.rootSignature->Release();
+	fen.fence->Release();
+	depth.resource->Release();
+	depth.heap->Release();
+	for (UINT i = 0; i < render.resource.size(); ++i)
+	{
+		render.resource[i]->Release();
+	}
+	render.heap->Release();
+	swap.factory->Release();
+	swap.swapChain->Release();
 	com.queue->Release();
 	com.list->Release();
 	com.allocator->Release();
@@ -57,6 +106,16 @@ Device::~Device()
 void Device::Init(void)
 {
 	CreateCommand();
+
+	CreateSwapChain();
+
+	CreateRenderTarget();
+
+	CreateDepthStencil();
+
+	CreateFence();
+
+	CreateRootSigunature();
 }
 
 // 処理
@@ -108,10 +167,10 @@ HRESULT Device::CreateCommand(void)
 
 	//コマンドキュー設定用構造体
 	D3D12_COMMAND_QUEUE_DESC desc = {};
-	desc.Flags		= D3D12_COMMAND_QUEUE_FLAG_NONE;
+	desc.Flags		= D3D12_COMMAND_QUEUE_FLAGS::D3D12_COMMAND_QUEUE_FLAG_NONE;
 	desc.NodeMask	= 0;
-	desc.Priority	= D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-	desc.Type		= D3D12_COMMAND_LIST_TYPE_DIRECT;
+	desc.Priority	= D3D12_COMMAND_QUEUE_PRIORITY::D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+	desc.Type		= D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT;
 
 	//コマンドキューの生成
 	result = dev->CreateCommandQueue(&desc, IID_PPV_ARGS(&com.queue));
@@ -140,4 +199,316 @@ HRESULT Device::CreateSwapChain(void)
 		OutputDebugString(_T("\nファクトリーの生成：失敗\n"));
 		return S_FALSE;
 	}
+
+	//スワップチェイン設定用構造体
+	DXGI_SWAP_CHAIN_DESC1 desc;
+	SecureZeroMemory(&desc, sizeof(desc));
+	desc.AlphaMode		= DXGI_ALPHA_MODE::DXGI_ALPHA_MODE_UNSPECIFIED;
+	desc.BufferCount	= 2;
+	desc.BufferUsage	= DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	desc.Flags			= 0;
+	desc.Format			= DXGI_FORMAT::DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.Height			= WINDOW_Y;
+	desc.SampleDesc		= { 1, 0 };
+	desc.Scaling		= DXGI_SCALING::DXGI_SCALING_STRETCH;
+	desc.Stereo			= false;
+	desc.SwapEffect		= DXGI_SWAP_EFFECT::DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	desc.Width			= WINDOW_X;
+
+	//スワップチェイン生成
+	result = swap.factory->CreateSwapChainForHwnd(com.queue, win.lock()->GetWindowHandle(), &desc, nullptr, nullptr, (IDXGISwapChain1**)(&swap.swapChain));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\nスワップチェインの生成：失敗\n"));
+		return result;
+	}
+
+	//バックバッファ数保存
+	swap.bufferCnt = desc.BufferCount;
+
+	return result;
+}
+
+// レンダーターゲット用ヒープの生成
+HRESULT Device::CreateRenderHeap(void)
+{
+	//ヒープ設定用構造体
+	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+	desc.Flags				= D3D12_DESCRIPTOR_HEAP_FLAGS::D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	desc.NodeMask			= 0;
+	desc.NumDescriptors		= swap.bufferCnt;
+	desc.Type				= D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+
+	//ヒープ生成
+	result = dev->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&render.heap));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\nレンダーターゲット用ヒープの生成：失敗\n"));
+		return result;
+	}
+
+	//ヒープサイズ設定
+	render.size = dev->GetDescriptorHandleIncrementSize(desc.Type);
+
+	return result;
+}
+
+// レンダーターゲットの生成
+HRESULT Device::CreateRenderTarget(void)
+{
+	if (CreateRenderHeap() != S_OK)
+	{
+		OutputDebugString(_T("\nレンダーターゲット用ヒープの生成：失敗\n"));
+		return S_FALSE;
+	}
+
+	//レンダーターゲット設定用構造体
+	D3D12_RENDER_TARGET_VIEW_DESC desc = {};
+	desc.Format					= DXGI_FORMAT::DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.ViewDimension			= D3D12_RTV_DIMENSION::D3D12_RTV_DIMENSION_TEXTURE2D;
+	desc.Texture2D.MipSlice		= 0;
+	desc.Texture2D.PlaneSlice	= 0;
+
+	//配列のメモリ確保
+	render.resource.resize(swap.bufferCnt);
+
+	//先頭ハンドル取得
+	D3D12_CPU_DESCRIPTOR_HANDLE handle = render.heap->GetCPUDescriptorHandleForHeapStart();
+
+	for (UINT i = 0; i < render.resource.size(); i++)
+	{
+		//バッファの取得
+		result = swap.swapChain->GetBuffer(i, IID_PPV_ARGS(&render.resource[i]));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nレンダーターゲットの生成：失敗\n"));
+			return result;
+		}
+
+		//レンダーターゲット生成
+		dev->CreateRenderTargetView(render.resource[i], &desc, handle);
+
+		//ハンドルの位置を移動
+		handle.ptr += render.size;
+	}
+
+	return result;
+}
+
+// 深度ステンシル用ヒープの生成
+HRESULT Device::CreateDepthHeap(void)
+{
+	//ヒープ設定用構造体
+	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+	desc.Flags				= D3D12_DESCRIPTOR_HEAP_FLAGS::D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	desc.NodeMask			= 0;
+	desc.NumDescriptors		= swap.bufferCnt;
+	desc.Type				= D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+
+	//深度ステンシル用ヒープ生成
+	result = dev->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&depth.heap));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\n深度ステンシル用ヒープの生成：失敗\n"));
+		return result;
+	}
+
+	//ヒープサイズ設定
+	depth.size = dev->GetDescriptorHandleIncrementSize(desc.Type);
+	return result;
+}
+
+// 深度ステンシルの生成
+HRESULT Device::CreateDepthStencil(void)
+{
+	if (CreateDepthHeap() != S_OK)
+	{
+		OutputDebugString(_T("\n深度ステンシル用ヒープの生成：失敗\n"));
+		return S_FALSE;
+	}
+
+	//ヒーププロパティ設定用構造体の設定
+	D3D12_HEAP_PROPERTIES prop = {};
+	prop.CPUPageProperty		= D3D12_CPU_PAGE_PROPERTY::D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	prop.CreationNodeMask		= 1;
+	prop.MemoryPoolPreference	= D3D12_MEMORY_POOL::D3D12_MEMORY_POOL_UNKNOWN;
+	prop.Type					= D3D12_HEAP_TYPE::D3D12_HEAP_TYPE_DEFAULT;
+	prop.VisibleNodeMask		= 1;
+
+	//リソース設定用構造体の設定
+	D3D12_RESOURCE_DESC rDesc = {};
+	rDesc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	rDesc.Alignment				= 0;
+	rDesc.Width					= WINDOW_X;
+	rDesc.Height				= WINDOW_Y;
+	rDesc.DepthOrArraySize		= 1;
+	rDesc.MipLevels				= 0;
+	rDesc.Format				= DXGI_FORMAT::DXGI_FORMAT_D32_FLOAT;
+	rDesc.SampleDesc.Count		= 1;
+	rDesc.SampleDesc.Quality	= 0;
+	rDesc.Flags					= D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+	rDesc.Layout				= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+	//クリア値設定用構造体の設定
+	D3D12_CLEAR_VALUE clear = {};
+	clear.Format				= DXGI_FORMAT::DXGI_FORMAT_D32_FLOAT;
+	clear.DepthStencil.Depth	= 1.0f;
+	clear.DepthStencil.Stencil	= 0;
+
+	//深度ステンシル用リソース生成
+	result = dev->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &rDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear, IID_PPV_ARGS(&depth.resource));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\n深度ステンシル用リソースの生成：失敗\n"));
+		return result;
+	}
+
+	//深度ステンシルビュー設定用構造体の設定
+	D3D12_DEPTH_STENCIL_VIEW_DESC desc = {};
+	desc.Format					= DXGI_FORMAT::DXGI_FORMAT_D32_FLOAT;
+	desc.ViewDimension			= D3D12_DSV_DIMENSION::D3D12_DSV_DIMENSION_TEXTURE2D;
+	desc.Flags					= D3D12_DSV_FLAGS::D3D12_DSV_FLAG_NONE;
+
+	//深度ステンシルビュー生成
+	dev->CreateDepthStencilView(depth.resource, &desc, depth.heap->GetCPUDescriptorHandleForHeapStart());
+
+	return result;
+}
+
+// フェンスの生成
+HRESULT Device::CreateFence(void)
+{
+	if (dev == nullptr)
+	{
+		OutputDebugString(_T("\nデバイスが生成されていません\n"));
+		return S_FALSE;
+	}
+
+	//フェンス生成
+	result = dev->CreateFence(fen.fenceCnt, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fen.fence));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\nフェンスの生成：失敗\n"));
+		return result;
+	}
+
+	//フェンス値更新
+	fen.fenceCnt = 1;
+
+	//フェンスイベント生成
+	fen.fenceEvent = CreateEventEx(nullptr, FALSE, FALSE, EVENT_ALL_ACCESS);
+	if (fen.fenceEvent == nullptr)
+	{
+		OutputDebugString(_T("\nフェンスイベントの生成：失敗\n"));
+		return S_FALSE;
+	}
+
+	return result;
+}
+
+// シグネチャのシリアライズ
+HRESULT Device::Serialize(void)
+{
+	// ディスクリプタレンジの設定.
+	D3D12_DESCRIPTOR_RANGE range[2];
+	SecureZeroMemory(&range, sizeof(range));
+
+	//ルートパラメータの設定.
+	D3D12_ROOT_PARAMETER param[2];
+	SecureZeroMemory(&param, sizeof(param));
+
+	//定数バッファ用
+	range[0].RangeType								= D3D12_DESCRIPTOR_RANGE_TYPE::D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+	range[0].NumDescriptors							= 1;
+	range[0].BaseShaderRegister						= 0;
+	range[0].RegisterSpace							= 0;
+	range[0].OffsetInDescriptorsFromTableStart		= D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	param[0].ParameterType							= D3D12_ROOT_PARAMETER_TYPE::D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	param[0].ShaderVisibility						= D3D12_SHADER_VISIBILITY::D3D12_SHADER_VISIBILITY_ALL;
+	param[0].DescriptorTable.NumDescriptorRanges	= 1;
+	param[0].DescriptorTable.pDescriptorRanges		= &range[0];
+
+	//テクスチャ用
+	range[1].RangeType								= D3D12_DESCRIPTOR_RANGE_TYPE::D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	range[1].NumDescriptors							= 1;
+	range[1].BaseShaderRegister						= 0;
+	range[1].RegisterSpace							= 0;
+	range[1].OffsetInDescriptorsFromTableStart		= D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	param[1].ParameterType							= D3D12_ROOT_PARAMETER_TYPE::D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	param[1].ShaderVisibility						= D3D12_SHADER_VISIBILITY::D3D12_SHADER_VISIBILITY_PIXEL;
+	param[1].DescriptorTable.NumDescriptorRanges	= 1;
+	param[1].DescriptorTable.pDescriptorRanges		= &range[1];
+
+	//静的サンプラーの設定
+	D3D12_STATIC_SAMPLER_DESC sampler = {};
+	sampler.Filter									= D3D12_FILTER::D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+	sampler.AddressU								= D3D12_TEXTURE_ADDRESS_MODE::D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressV								= D3D12_TEXTURE_ADDRESS_MODE::D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.AddressW								= D3D12_TEXTURE_ADDRESS_MODE::D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler.MipLODBias								= 0;
+	sampler.MaxAnisotropy							= 0;
+	sampler.ComparisonFunc							= D3D12_COMPARISON_FUNC::D3D12_COMPARISON_FUNC_NEVER;
+	sampler.BorderColor								= D3D12_STATIC_BORDER_COLOR::D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+	sampler.MinLOD									= 0.0f;
+	sampler.MaxLOD									= D3D12_FLOAT32_MAX;
+	sampler.ShaderRegister							= 0;
+	sampler.RegisterSpace							= 0;
+	sampler.ShaderVisibility						= D3D12_SHADER_VISIBILITY::D3D12_SHADER_VISIBILITY_ALL;
+
+	//ルートシグネチャ設定用構造体の設定
+	D3D12_ROOT_SIGNATURE_DESC desc = {};
+	desc.NumParameters								= _countof(param);
+	desc.pParameters								= param;
+	desc.NumStaticSamplers							= 1;
+	desc.pStaticSamplers							= &sampler;
+	desc.Flags										= D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+	//ルートシグネチャのシリアライズ化
+	result = D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &sig.signature, &sig.error);
+
+	return result;
+}
+
+// ルートシグネチャの生成
+HRESULT Device::CreateRootSigunature(void)
+{
+	if (Serialize() != S_OK)
+	{
+		OutputDebugString(_T("\nシリアライズ化：失敗\n"));
+		return S_FALSE;
+	}
+
+	//ルートシグネチャ生成
+	result = dev->CreateRootSignature(0, sig.signature->GetBufferPointer(), sig.signature->GetBufferSize(), IID_PPV_ARGS(&sig.rootSignature));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\nルートシグネチャの生成：失敗\n"));
+		return result;
+	}
+
+	return result;
+}
+
+// シェーダのコンパイル
+HRESULT Device::ShaderCompile(LPCWSTR fileName)
+{
+	//頂点シェーダのコンパイル
+	result = D3DCompileFromFile(fileName, nullptr, nullptr, "TextureVS", "vs_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pipe.vertex, &sig.error);
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\n頂点シェーダコンパイル：失敗\n"));
+		return result;
+	}
+
+	//ピクセルシェーダのコンパイル
+	result = D3DCompileFromFile(fileName, nullptr, nullptr, "TexturePS", "ps_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pipe.pixel, &sig.error);
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\nピクセルシェーダコンパイル：失敗\n"));
+		return result;
+	}
+
+	return result;
 }

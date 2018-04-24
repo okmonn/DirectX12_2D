@@ -30,6 +30,61 @@ class Device
 		UINT				bufferCnt;
 	};
 
+	// レンダーターゲット
+	struct RenderTarget
+	{
+		//ヒープ
+		ID3D12DescriptorHeap* heap;
+		//リソース
+		std::vector<ID3D12Resource*>resource;
+		//ヒープサイズ
+		UINT size;
+	};
+
+	// 深度ステンシル
+	struct DepthStencil
+	{
+		//ヒープ
+		ID3D12DescriptorHeap* heap;
+		//リソース
+		ID3D12Resource* resource;
+		//ヒープサイズ
+		UINT size;
+	};
+
+	// フェンス
+	struct Fence
+	{
+		//フェンス
+		ID3D12Fence* fence;
+		//フェンス値
+		UINT64			fenceCnt;
+		//フェンスイベント
+		HANDLE			fenceEvent;
+	};
+
+	// ルートシグネチャ
+	struct RootSignature
+	{
+		//メッセージ
+		ID3DBlob*				signature;
+		//エラーメッセージ
+		ID3DBlob*				error;
+		//ルートシグネチャ
+		ID3D12RootSignature*	rootSignature;
+	};
+
+	// パイプライン
+	struct PipeLine
+	{
+		//頂点データ
+		ID3DBlob* vertex;
+		//ピクセルデータ
+		ID3DBlob* pixel;
+		//パイプライン
+		ID3D12PipelineState* pipeline;
+	};
+
 public:
 	// コンストラクタ
 	Device(std::weak_ptr<Window>win, std::weak_ptr<Input>in);
@@ -52,6 +107,27 @@ private:
 	// スワップチェインの生成
 	HRESULT CreateSwapChain(void);
 
+	// レンダーターゲット用ヒープの生成
+	HRESULT CreateRenderHeap(void);
+	// レンダーターゲットの生成
+	HRESULT CreateRenderTarget(void);
+
+	// 深度ステンシル用ヒープの生成
+	HRESULT CreateDepthHeap(void);
+	// 深度ステンシルの生成
+	HRESULT CreateDepthStencil(void);
+
+	// フェンスの生成
+	HRESULT CreateFence(void);
+
+	// シグネチャのシリアライズ
+	HRESULT Serialize(void);
+	// ルートシグネチャの生成
+	HRESULT CreateRootSigunature(void);
+
+	// シェーダのコンパイル
+	HRESULT ShaderCompile(LPCWSTR fileName);
+
 
 	// ウィンドウクラス
 	std::weak_ptr<Window>win;
@@ -73,4 +149,19 @@ private:
 
 	// スワップチェイン
 	Swap swap;
+
+	// レンダーターゲット
+	RenderTarget render;
+
+	// 深度ステンシル
+	DepthStencil depth;
+
+	// フェンス
+	Fence fen;
+
+	// ルートシグネチャ
+	RootSignature sig;
+
+	// パイプライン
+	PipeLine pipe;
 };
