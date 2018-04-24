@@ -1,4 +1,5 @@
 #pragma once
+#include <DirectXMath.h>
 #include <string>
 
 // ウィンドウサイズ
@@ -10,11 +11,19 @@
 // ラジアン変換
 #define RAD(X) (X) * (PI / 180.0f)
 
-//ビューモード
-static std::string mode[] =
+// 空間行列
+struct WVP
 {
-	"頂点",
-	"深度",
-	"定数",
+	//ワールド
+	DirectX::XMMATRIX world;
+	//ビュープロジェクション
+	DirectX::XMMATRIX viewProjection;
+};
+
+// 頂点データ
+struct Vertex
+{
+	DirectX::XMFLOAT3 pos;
+	DirectX::XMFLOAT2 uv;
 };
 

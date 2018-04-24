@@ -1,6 +1,7 @@
 #pragma once
 #include "Window.h"
 #include "Input.h"
+#include "Typedef.h"
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <memory>
@@ -85,6 +86,19 @@ class Device
 		ID3D12PipelineState* pipeline;
 	};
 
+	// 定数バッファ
+	struct Constant
+	{
+		//ヒープ
+		ID3D12DescriptorHeap* heap;
+		//リソース
+		ID3D12Resource* resource;
+		//ヒープサイズ
+		UINT size;
+		//送信データ
+		UINT8* data;
+	};
+
 public:
 	// コンストラクタ
 	Device(std::weak_ptr<Window>win, std::weak_ptr<Input>in);
@@ -97,6 +111,9 @@ public:
 	// 処理
 	void UpData(void);
 private:
+	//ワールドビュープロジェクションのセット
+	void SetWorldViewProjection(void);
+
 	// デバイスの生成
 	HRESULT CreateDevice(void);
 	// コマンド周りの生成
@@ -127,6 +144,14 @@ private:
 
 	// シェーダのコンパイル
 	HRESULT ShaderCompile(LPCWSTR fileName);
+
+	// パイプラインの生成
+	HRESULT CreatePipeline(void);
+
+	// 定数バッファ用ヒープの生成	
+	HRESULT CreateConstantHeap(void);
+	// 定数バッファの生成
+	HRESULT CreateConstant(void);
 
 
 	// ウィンドウクラス
@@ -164,4 +189,10 @@ private:
 
 	// パイプライン
 	PipeLine pipe;
+
+	// 定数バッファ
+	Constant con;
+
+	// WVP
+	WVP wvp;
 };

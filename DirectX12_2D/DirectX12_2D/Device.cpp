@@ -1,5 +1,5 @@
 #include "Device.h"
-#include "Typedef.h"
+#include "d3dx12.h"
 #include <d3dcompiler.h>
 #include <tchar.h>
 
@@ -49,6 +49,12 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 	//パイプライン
 	pipe = {};
 
+	//定数バッファ
+	con = {};
+
+	//WVP
+	wvp = {};
+
 
 	//エラーを出力に表示させる
 #ifdef _DEBUG
@@ -68,6 +74,8 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 // デストラクタ
 Device::~Device()
 {
+	con.resource->Release();
+	con.heap->Release();
 	if (pipe.vertex != nullptr)
 	{
 		pipe.vertex->Release();
@@ -105,6 +113,8 @@ Device::~Device()
 // 初期化
 void Device::Init(void)
 {
+	SetWorldViewProjection();
+
 	CreateCommand();
 
 	CreateSwapChain();
@@ -116,11 +126,42 @@ void Device::Init(void)
 	CreateFence();
 
 	CreateRootSigunature();
+
+	ShaderCompile(_T("Shader.hlsl"));
+
+	CreatePipeline();
+
+	CreateConstant();
 }
 
 // 処理
 void Device::UpData(void)
 {
+}
+
+//ワールドビュープロジェクションのセット
+void Device::SetWorldViewProjection(void)
+{
+	//ダミー宣言
+	FLOAT pos = 0.0f;
+	DirectX::XMMATRIX view = DirectX::XMMatrixIdentity();
+	//カメラの位置
+	DirectX::XMVECTOR eye = { 0, pos,  -1 };
+	//カメラの焦点
+	DirectX::XMVECTOR target = { 0, pos,   0 };
+	//カメラの上方向
+	DirectX::XMVECTOR upper = { 0, 1,     0 };
+
+	view = DirectX::XMMatrixLookAtLH(eye, target, upper);
+
+	//ダミー宣言
+	DirectX::XMMATRIX projection = DirectX::XMMatrixIdentity();
+
+	projection = DirectX::XMMatrixPerspectiveFovLH(RAD(90), ((static_cast<FLOAT>(WINDOW_X) / static_cast<FLOAT>(WINDOW_Y))), 0.5f, 500.0f);
+
+	//更新
+	wvp.world = DirectX::XMMatrixIdentity();
+	wvp.viewProjection = view * projection;
 }
 
 // デバイスの生成
@@ -509,6 +550,167 @@ HRESULT Device::ShaderCompile(LPCWSTR fileName)
 		OutputDebugString(_T("\nピクセルシェーダコンパイル：失敗\n"));
 		return result;
 	}
+
+	return result;
+}
+
+// パイプラインの生成
+HRESULT Device::CreatePipeline(void)
+{
+	//頂点レイアウト設定用構造体の設定
+	D3D12_INPUT_ELEMENT_DESC input[] =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+	};
+
+	//ラスタライザーステート設定用構造体の設定
+	D3D12_RASTERIZER_DESC rasterizer = {};
+	rasterizer.FillMode						= D3D12_FILL_MODE::D3D12_FILL_MODE_SOLID;
+	rasterizer.CullMode						= D3D12_CULL_MODE::D3D12_CULL_MODE_NONE;
+	rasterizer.FrontCounterClockwise		= FALSE;
+	rasterizer.DepthBias					= D3D12_DEFAULT_DEPTH_BIAS;
+	rasterizer.DepthBiasClamp				= D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+	rasterizer.SlopeScaledDepthBias			= D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+	rasterizer.DepthClipEnable				= TRUE;
+	rasterizer.MultisampleEnable			= FALSE;
+	rasterizer.AntialiasedLineEnable		= FALSE;
+	rasterizer.ForcedSampleCount			= 0;
+	rasterizer.ConservativeRaster			= D3D12_CONSERVATIVE_RASTERIZATION_MODE::D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+	//レンダーターゲットブレンド設定用構造体
+	D3D12_RENDER_TARGET_BLEND_DESC renderBlend = {};
+	renderBlend.BlendEnable					= FALSE;
+	renderBlend.BlendOp						= D3D12_BLEND_OP::D3D12_BLEND_OP_ADD;
+	renderBlend.BlendOpAlpha				= D3D12_BLEND_OP::D3D12_BLEND_OP_ADD;
+	renderBlend.DestBlend					= D3D12_BLEND::D3D12_BLEND_ZERO;
+	renderBlend.DestBlendAlpha				= D3D12_BLEND::D3D12_BLEND_ZERO;
+	renderBlend.LogicOp						= D3D12_LOGIC_OP::D3D12_LOGIC_OP_NOOP;
+	renderBlend.LogicOpEnable				= FALSE;
+	renderBlend.RenderTargetWriteMask		= D3D12_COLOR_WRITE_ENABLE::D3D12_COLOR_WRITE_ENABLE_ALL;
+	renderBlend.SrcBlend					= D3D12_BLEND::D3D12_BLEND_ONE;
+	renderBlend.SrcBlendAlpha				= D3D12_BLEND::D3D12_BLEND_ONE;
+
+	//ブレンドステート設定用構造体
+	D3D12_BLEND_DESC descBS = {};
+	descBS.AlphaToCoverageEnable			= FALSE;
+	descBS.IndependentBlendEnable			= FALSE;
+	for (UINT i = 0; i < swap.bufferCnt; i++)
+	{
+		descBS.RenderTarget[i]				= renderBlend;
+	}
+
+	//パイプラインステート設定用構造体
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+	desc.InputLayout						= { input, _countof(input) };
+	desc.PrimitiveTopologyType				= D3D12_PRIMITIVE_TOPOLOGY_TYPE::D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.pRootSignature						= sig.rootSignature;
+	desc.VS									= CD3DX12_SHADER_BYTECODE(pipe.vertex);
+	desc.PS									= CD3DX12_SHADER_BYTECODE(pipe.pixel);
+	desc.RasterizerState					= rasterizer;
+	desc.BlendState							= descBS;
+	desc.DepthStencilState.DepthEnable		= true;
+	desc.DepthStencilState.DepthWriteMask	= D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc		= D3D12_COMPARISON_FUNC_LESS;
+	desc.DepthStencilState.StencilEnable	= FALSE;
+	desc.SampleMask							= UINT_MAX;
+	desc.NumRenderTargets					= 1;
+	desc.RTVFormats[0]						= DXGI_FORMAT::DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	desc.DSVFormat							= DXGI_FORMAT::DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count					= 1;
+
+	//パイプライン生成
+	result = dev->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipe.pipeline));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\nパイプラインの生成：失敗\n"));
+		return result;
+	}
+
+	return result;
+}
+
+// 定数バッファ用ヒープの生成
+HRESULT Device::CreateConstantHeap(void)
+{
+	//定数バッファ設定用構造体の設定
+	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
+	desc.NumDescriptors		= 2;
+	desc.Flags				= D3D12_DESCRIPTOR_HEAP_FLAGS::D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	desc.Type				= D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+
+	//ヒープ生成
+	result = dev->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&con.heap));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\n定数バッファ用ヒープの生成：失敗\n"));
+		return result;
+	}
+
+	//ヒープサイズ設定
+	con.size = dev->GetDescriptorHandleIncrementSize(desc.Type);
+
+	return result;
+}
+
+// 定数バッファの生成
+HRESULT Device::CreateConstant(void)
+{
+	if (CreateConstantHeap() != S_OK)
+	{
+		OutputDebugString(_T("\n定数バッファ用ヒープの生成：失敗\n"));
+		return S_FALSE;
+	}
+
+	//ヒープ設定用構造体の設定
+	D3D12_HEAP_PROPERTIES prop = {};
+	prop.Type					= D3D12_HEAP_TYPE::D3D12_HEAP_TYPE_UPLOAD;
+	prop.CPUPageProperty		= D3D12_CPU_PAGE_PROPERTY::D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	prop.MemoryPoolPreference	= D3D12_MEMORY_POOL::D3D12_MEMORY_POOL_UNKNOWN;
+	prop.CreationNodeMask		= 1;
+	prop.VisibleNodeMask		= 1;
+
+	//リソース設定用構造体の設定
+	D3D12_RESOURCE_DESC rDesc = {};
+	rDesc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
+	rDesc.Width					= ((sizeof(WVP) + 0xff) &~0xff);
+	rDesc.Height				= 1;
+	rDesc.DepthOrArraySize		= 1;
+	rDesc.MipLevels				= 1;
+	rDesc.Format				= DXGI_FORMAT::DXGI_FORMAT_UNKNOWN;
+	rDesc.SampleDesc.Count		= 1;
+	rDesc.Flags					= D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE;
+	rDesc.Layout				= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	//リソース生成
+	result = dev->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &rDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&con.resource));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\n定数バッファ用リソースの生成：失敗\n"));
+		return result;
+	}
+
+	//定数バッファビュー設定用構造体の設定
+	D3D12_CONSTANT_BUFFER_VIEW_DESC desc = {};
+	desc.BufferLocation			= con.resource->GetGPUVirtualAddress();
+	desc.SizeInBytes			= (sizeof(WVP) + 0xff) &~0xff;
+
+	//定数バッファビュー生成
+	dev->CreateConstantBufferView(&desc, con.heap->GetCPUDescriptorHandleForHeapStart());
+
+	//送信範囲
+	D3D12_RANGE range = { 0, 0 };
+
+	//マッピング
+	result = con.resource->Map(0, &range, (void**)(&con.data));
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\n定数バッファ用リソースのマッピング：失敗\n"));
+		return result;
+	}
+
+	//コピー
+	memcpy(con.data, &wvp, sizeof(DirectX::XMMATRIX));
 
 	return result;
 }
