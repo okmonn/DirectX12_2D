@@ -2,6 +2,7 @@
 #include "Window.h"
 #include "Input.h"
 #include "Typedef.h"
+#include <DirectXMath.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <memory>
@@ -9,6 +10,26 @@
 
 class Device
 {
+	//サイズ
+	struct Size
+	{
+		LONG width;
+		LONG height;
+	};
+
+	//BMPデータの構造体
+	struct BMP
+	{
+		//画像サイズ
+		Size					size;
+		//bmpデータ
+		std::vector<UCHAR>		data;
+		//ヒープ
+		ID3D12DescriptorHeap*	heap;
+		//リソース
+		ID3D12Resource*			resource;
+	};
+
 	// コマンド周り
 	struct Command
 	{
@@ -99,6 +120,12 @@ class Device
 		UINT8* data;
 	};
 
+	struct Vertex
+	{
+		DirectX::XMFLOAT3 pos;
+		DirectX::XMFLOAT2 uv;
+	};
+
 public:
 	// コンストラクタ
 	Device(std::weak_ptr<Window>win, std::weak_ptr<Input>in);
@@ -153,6 +180,18 @@ private:
 	// 定数バッファの生成
 	HRESULT CreateConstant(void);
 
+	// ビューポートのセット
+	void SetViewPort(void);
+
+	// シザーのセット
+	void SetScissor(void);
+
+	// バリアの更新
+	void Barrier(D3D12_RESOURCE_STATES befor, D3D12_RESOURCE_STATES affter);
+
+	// 待機処理
+	void Wait(void);
+
 
 	// ウィンドウクラス
 	std::weak_ptr<Window>win;
@@ -165,6 +204,9 @@ private:
 
 	// 機能レベル
 	D3D_FEATURE_LEVEL level;
+
+	// 回転角度
+	FLOAT angle;
 
 	// デバイス
 	ID3D12Device* dev;
@@ -195,4 +237,18 @@ private:
 
 	// WVP
 	WVP wvp;
+
+	// ビューポート
+	D3D12_VIEWPORT viewPort;
+
+	// シザー
+	RECT scissor;
+
+	// バリア
+	D3D12_RESOURCE_BARRIER barrier;
+
+	D3D12_VERTEX_BUFFER_VIEW view;
+	ID3D12Resource* vi;
+
+	BMP bmp;
 };

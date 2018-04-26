@@ -1,4 +1,6 @@
 #include "Device.h"
+#include "Typedef.h"
+#include "Texture.h"
 #include "d3dx12.h"
 #include <d3dcompiler.h>
 #include <tchar.h>
@@ -6,6 +8,9 @@
 #pragma comment (lib,"d3d12.lib")
 #pragma comment (lib,"dxgi.lib")
 #pragma comment (lib,"d3dcompiler.lib")
+
+//クリアカラーの指定
+const FLOAT clearColor[] = { 1.0f,0.0f,1.0f,1.0f };
 
 // 機能レベル一覧
 D3D_FEATURE_LEVEL levels[] = 
@@ -24,6 +29,9 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 
 	//機能レベル
 	level = D3D_FEATURE_LEVEL_12_1;
+
+	//回転角度
+	angle = 0.0f;
 
 	//デバイス
 	dev = nullptr;
@@ -55,6 +63,17 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 	//WVP
 	wvp = {};
 
+	//ビューポート
+	viewPort = {};
+
+	//シザー
+	scissor = {};
+
+	// バリア
+	barrier = {};
+	view = {};
+	bmp = {};
+
 
 	//エラーを出力に表示させる
 #ifdef _DEBUG
@@ -74,6 +93,7 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 // デストラクタ
 Device::~Device()
 {
+	con.resource->Unmap(0, nullptr);
 	con.resource->Release();
 	con.heap->Release();
 	if (pipe.vertex != nullptr)
@@ -132,11 +152,132 @@ void Device::Init(void)
 	CreatePipeline();
 
 	CreateConstant();
+
+	SetViewPort();
+
+	SetScissor();
+
+	Texture::Create();
+	Texture::GetInstance()->LoadBMP(0, "img/グラブル.bmp", dev);
+
+	/*Vertex v[] = 
+	{
+		{ { -1.0f / 2.0f, 1.0f / 2.0f,	0.0f },{ 0, 0 } },	//左上
+	{ { 1.0f / 2.0f, 1.0f / 2.0f,	0.0f },{ 1, 0 } },	//右上
+	{ { 1.0f / 2.0f, -1.0f / 2.0f,	0.0f },{ 1, 1 } },	//右下
+
+	{ { 1.0f / 2.0f, -1.0f / 2.0f,	0.0f },{ 1, 1 } },	//右下
+	{ { -1.0f / 2.0f, -1.0f / 2.0f, 0.0f },{ 0, 1 } },	//左下
+	{ { -1.0f / 2.0f,  1.0f / 2.0f,	0.0f },{ 0, 0 } }	//左上
+	};
+
+	//頂点用リソース生成
+	result = dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(v)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&vi));
+	//送信用データ
+	UCHAR* data = nullptr;
+
+	//送信範囲
+	D3D12_RANGE range = { 0,0 };
+
+	//マッピング
+	result = vi->Map(0, &range, reinterpret_cast<void**>(&data));
+	//頂点データのコピー
+	memcpy(data, &v, (sizeof(v)));
+
+	//アンマッピング
+	vi->Unmap(0, nullptr);
+
+	//頂点バッファ設定用構造体の設定
+	view.BufferLocation = vi->GetGPUVirtualAddress();
+	view.SizeInBytes = sizeof(Vertex) * 6;
+	view.StrideInBytes = sizeof(Vertex);*/
 }
 
 // 処理
 void Device::UpData(void)
 {
+	if (in.lock()->InputKey(DIK_RIGHT) == TRUE)
+	{
+		//回転
+		angle++;
+		//行列更新
+		wvp.world = DirectX::XMMatrixRotationY(RAD(angle));
+	}
+	else if (in.lock()->InputKey(DIK_LEFT) == TRUE)
+	{
+		//回転
+		angle--;
+		//行列更新
+		wvp.world = DirectX::XMMatrixRotationY(RAD(angle));
+	}
+
+	//行列データ更新
+	memcpy(con.data, &wvp, sizeof(WVP));
+
+	//コマンドアロケータのリセット
+	com.allocator->Reset();
+	//リストのリセット
+	com.list->Reset(com.allocator, pipe.pipeline);
+
+	//ルートシグネチャのセット
+	com.list->SetGraphicsRootSignature(sig.rootSignature);
+
+	//パイプラインのセット
+	com.list->SetPipelineState(pipe.pipeline);
+
+	//定数バッファヒープの先頭ハンドルを取得
+	D3D12_GPU_DESCRIPTOR_HANDLE c_handle = con.heap->GetGPUDescriptorHandleForHeapStart();
+
+	//定数バッファヒープのセット
+	com.list->SetDescriptorHeaps(1, &con.heap);
+
+	//定数バッファディスクラプターテーブルのセット
+	com.list->SetGraphicsRootDescriptorTable(0, c_handle);
+
+	//ビューのセット
+	com.list->RSSetViewports(1, &viewPort);
+
+	//シザーのセット
+	com.list->RSSetScissorRects(1, &scissor);
+
+	//Present ---> RenderTarget
+	Barrier(D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+	//頂点ヒープの先頭ハンドルの取得
+	CD3DX12_CPU_DESCRIPTOR_HANDLE r_handle(render.heap->GetCPUDescriptorHandleForHeapStart(), swap.swapChain->GetCurrentBackBufferIndex(), render.size);
+
+	//レンダーターゲットのセット
+	com.list->OMSetRenderTargets(1, &r_handle, false, &depth.heap->GetCPUDescriptorHandleForHeapStart());
+
+	//レンダーターゲットのクリア
+	com.list->ClearRenderTargetView(r_handle, clearColor, 0, nullptr);
+
+	//深度ステンシルヒープの先頭ハンドルの取得
+	D3D12_CPU_DESCRIPTOR_HANDLE d_handle = depth.heap->GetCPUDescriptorHandleForHeapStart();
+
+	//深度ステンシルビューのクリア
+	com.list->ClearDepthStencilView(d_handle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+	//描画
+	com.list->IASetVertexBuffers(0, 1, &view);
+	Texture::GetInstance()->SetDraw(0, com.list, 1);
+
+
+	// RenderTarget ---> Present
+	Barrier(D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+
+	//コマンドリストの記録終了
+	com.list->Close();
+
+	//リストの配列
+	ID3D12CommandList *commandList[] = { com.list };
+	//配列でない場合：queue->ExecuteCommandLists(1, (ID3D12CommandList*const*)&list);
+	com.queue->ExecuteCommandLists(_countof(commandList), commandList);
+
+	//裏、表画面を反転
+	swap.swapChain->Present(1, 0);
+
+	Wait();
 }
 
 //ワールドビュープロジェクションのセット
@@ -205,6 +346,9 @@ HRESULT Device::CreateCommand(void)
 		OutputDebugString(_T("\nコマンドリストの生成：失敗\n"));
 		return result;
 	}
+
+	//いったん閉じる
+	com.list->Close();
 
 	//コマンドキュー設定用構造体
 	D3D12_COMMAND_QUEUE_DESC desc = {};
@@ -615,7 +759,7 @@ HRESULT Device::CreatePipeline(void)
 	desc.DepthStencilState.StencilEnable	= FALSE;
 	desc.SampleMask							= UINT_MAX;
 	desc.NumRenderTargets					= 1;
-	desc.RTVFormats[0]						= DXGI_FORMAT::DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	desc.RTVFormats[0]						= DXGI_FORMAT::DXGI_FORMAT_R8G8B8A8_UNORM;
 	desc.DSVFormat							= DXGI_FORMAT::DXGI_FORMAT_D32_FLOAT;
 	desc.SampleDesc.Count					= 1;
 
@@ -713,4 +857,73 @@ HRESULT Device::CreateConstant(void)
 	memcpy(con.data, &wvp, sizeof(DirectX::XMMATRIX));
 
 	return result;
+}
+
+// ビューポートのセット
+void Device::SetViewPort(void)
+{
+	viewPort.TopLeftX	= 0;
+	viewPort.TopLeftY	= 0;
+	viewPort.Width		= WINDOW_X;
+	viewPort.Height		= WINDOW_Y;
+	viewPort.MinDepth	= 0;
+	viewPort.MaxDepth	= 1;
+}
+
+// シザーのセット
+void Device::SetScissor(void)
+{
+	scissor.left	= 0;
+	scissor.right	= WINDOW_X;
+	scissor.top		= 0;
+	scissor.bottom	= WINDOW_Y;
+}
+
+// バリアの更新
+void Device::Barrier(D3D12_RESOURCE_STATES befor, D3D12_RESOURCE_STATES affter)
+{
+	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Flags					= D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Transition.pResource	= render.resource[swap.swapChain->GetCurrentBackBufferIndex()];
+	barrier.Transition.StateBefore	= befor;
+	barrier.Transition.StateAfter	= affter;
+	barrier.Transition.Subresource	= D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
+	//バリア設置
+	com.list->ResourceBarrier(1, &barrier);
+}
+
+// 待機処理
+void Device::Wait(void)
+{
+	//フェンス値更新
+	fen.fenceCnt++;
+
+	//フェンス値を変更
+	result = com.queue->Signal(fen.fence, fen.fenceCnt);
+	if (FAILED(result))
+	{
+		OutputDebugString(_T("\nフェンス値の更新：失敗\n"));
+		return;
+	}
+
+	//完了を待機(ポーリング)
+	while (fen.fence->GetCompletedValue() != fen.fenceCnt)
+	{
+		/*auto a = fence.fenceCnt;
+		std::stringstream s;
+		s << a;
+		OutputDebugStringA(s.str().c_str());*/
+
+		//フェンスイベントのセット
+		result = fen.fence->SetEventOnCompletion(fen.fenceCnt, fen.fenceEvent);
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nフェンスイベントのセット：失敗\n"));
+			return;
+		}
+
+		//フェンスイベントの待機
+		WaitForSingleObject(fen.fenceEvent, INFINITE);
+	}
 }

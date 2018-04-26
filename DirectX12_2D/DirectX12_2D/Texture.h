@@ -1,7 +1,9 @@
 #pragma once
 #include <d3d12.h>
+#include <DirectXMath.h>
 #include <string>
 #include <vector>
+#include <map>
 
 class Texture
 {
@@ -13,17 +15,39 @@ class Texture
 	};
 	
 	//BMPデータの構造体
-	typedef struct
+	struct BMP
 	{
 		//画像サイズ
-		Size				size;
+		Size					size;
 		//bmpデータ
-		std::vector<UCHAR>		bmp;
+		std::vector<UCHAR>		data;
 		//ヒープ
 		ID3D12DescriptorHeap*	heap;
 		//リソース
 		ID3D12Resource*			resource;
-	}Data;
+	};
+
+	//頂点
+	struct VERTEX
+	{
+		//座標
+		DirectX::XMFLOAT3 pos;
+		//uv
+		DirectX::XMFLOAT2 uv;
+	};
+
+	//頂点データ
+	struct Vertex
+	{
+		//頂点データ
+		std::vector<VERTEX>vertex;
+		//リソース
+		ID3D12Resource* resource;
+		//送信データ
+		UCHAR* data;
+		// 頂点バッファビュー
+		D3D12_VERTEX_BUFFER_VIEW vertexView;
+	};
 
 public:
 	// デストラクタ
@@ -35,21 +59,44 @@ public:
 	static void Destroy(void);
 
 	// インスタンス変数の取得
-	Texture* GetInstance(void)
+	static Texture* GetInstance(void)
 	{
 		return s_Instance;
 	}
 
 	// 読み込み
-	HRESULT LoadBMP(std::string fileName);
+	HRESULT LoadBMP(USHORT index, std::string fileName, ID3D12Device* dev);
+
+	// 描画準備
+	void SetDraw(USHORT index, ID3D12GraphicsCommandList* list, UINT rootParamIndex);
+	
+	// 描画
+	void Draw(USHORT index, FLOAT x, FLOAT y, ID3D12GraphicsCommandList * list, UINT rootParamIndex);
+
 private:
 	// コンストラクタ
 	Texture();
+
+	// 定数バッファ用のヒープの生成	
+	HRESULT CreateConstantHeap(USHORT index, ID3D12Device* dev);
+	// 定数バッファの生成
+	HRESULT CreateConstant(USHORT index, ID3D12Device* dev);
+	// シェーダリソースビューの生成
+	HRESULT CreateShaderResourceView(USHORT index, ID3D12Device* dev);
+
+	// 頂点リソースの生成
+	HRESULT CreateVertex(USHORT index, ID3D12Device* dev);
 
 	// インスタンス変数
 	static Texture* s_Instance;
 
 	// 参照結果
 	HRESULT result;
+
+	// BMPデータ
+	std::map<USHORT, BMP>bmp;
+
+	// 頂点データ
+	std::map<USHORT, Vertex>v;
 };
 

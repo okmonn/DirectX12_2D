@@ -6,11 +6,8 @@
 #pragma comment(lib, "dinput8.lib")
 
 // コンストラクタ
-Input::Input(std::weak_ptr<Window>winAdr)
+Input::Input(std::weak_ptr<Window>winAdr) : win(winAdr)
 {
-	//ウィンドウクラス参照
-	win = winAdr;
-
 	//参照結果の初期化
 	result = S_OK;
 
