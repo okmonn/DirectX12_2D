@@ -1,6 +1,6 @@
 #pragma once
+#include "Typedef.h"
 #include <d3d12.h>
-#include <DirectXMath.h>
 #include <string>
 #include <vector>
 #include <map>
@@ -27,20 +27,11 @@ class Texture
 		ID3D12Resource*			resource;
 	};
 
-	//頂点
-	struct VERTEX
-	{
-		//座標
-		DirectX::XMFLOAT3 pos;
-		//uv
-		DirectX::XMFLOAT2 uv;
-	};
-
 	//頂点データ
-	struct Vertex
+	struct VertexData
 	{
 		//頂点データ
-		std::vector<VERTEX>vertex;
+		Vertex vertex[6];
 		//リソース
 		ID3D12Resource* resource;
 		//送信データ
@@ -87,6 +78,12 @@ private:
 	// 頂点リソースの生成
 	HRESULT CreateVertex(USHORT index, ID3D12Device* dev);
 
+	// 解放処理
+	void Release(ID3D12Resource* resource);
+	// 解放処理
+	void Release(ID3D12DescriptorHeap* heap);
+
+
 	// インスタンス変数
 	static Texture* s_Instance;
 
@@ -97,6 +94,6 @@ private:
 	std::map<USHORT, BMP>bmp;
 
 	// 頂点データ
-	std::map<USHORT, Vertex>v;
+	std::map<USHORT, VertexData>v;
 };
 

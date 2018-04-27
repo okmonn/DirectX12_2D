@@ -20,10 +20,11 @@ struct WVP
 	DirectX::XMMATRIX viewProjection;
 };
 
-// 頂点データ
+//頂点
 struct Vertex
 {
+	//座標
 	DirectX::XMFLOAT3 pos;
+	//uv
 	DirectX::XMFLOAT2 uv;
 };
-

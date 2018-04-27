@@ -37,15 +37,17 @@ Texture::Texture()
 // デストラクタ
 Texture::~Texture()
 {
-	for (auto itr = bmp.begin(); itr != bmp.end(); ++itr)
-	{
-		itr->second.resource->Release();
-		itr->second.heap->Release();
-	}
-
+	//頂点データ
 	for (auto itr = v.begin(); itr != v.end(); ++itr)
 	{
-		itr->second.resource->Release();
+		Release(itr->second.resource);
+	}
+
+	//定数バッファ
+	for (auto itr = bmp.begin(); itr != bmp.end(); ++itr)
+	{
+		Release(itr->second.resource);
+		Release(itr->second.heap);
 	}
 }
 
@@ -120,8 +122,8 @@ HRESULT Texture::LoadBMP(USHORT index, std::string fileName, ID3D12Device* dev)
 	//ファイルを閉じる
 	fclose(file);
 
-	result = CreateVertex(index, dev);
 	result = CreateShaderResourceView(index, dev);
+	result = CreateVertex(index, dev);
 
 	return result;
 }
@@ -216,7 +218,6 @@ HRESULT Texture::CreateShaderResourceView(USHORT index, ID3D12Device * dev)
 HRESULT Texture::CreateVertex(USHORT index, ID3D12Device * dev)
 {
 	//配列のメモリ確保
-	v[index].vertex.resize(6);
 	v[index].data = nullptr;
 
 	v[index].vertex[0] = { { -1.0f / 2.0f,  1.0f / 2.0f, 0.0f },{ 0.0f, 0.0f } };//左上
@@ -237,7 +238,7 @@ HRESULT Texture::CreateVertex(USHORT index, ID3D12Device * dev)
 	//リソース設定用構造体の設定
 	D3D12_RESOURCE_DESC desc = {};
 	desc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
-	desc.Width					= sizeof(VERTEX) * v[index].vertex.size();//((sizeof(v[index].vertex) + 0xff) &~0xff);
+	desc.Width					= sizeof(v[index].vertex);//((sizeof(v[index].vertex) + 0xff) &~0xff);
 	desc.Height					= 1;
 	desc.DepthOrArraySize		= 1;
 	desc.MipLevels				= 1;
@@ -266,15 +267,15 @@ HRESULT Texture::CreateVertex(USHORT index, ID3D12Device * dev)
 	}
 
 	//頂点データのコピー
-	memcpy(v[index].data, &v[index].vertex, (sizeof(VERTEX) * v[index].vertex.size()));
+	memcpy(v[index].data, &v[index].vertex, sizeof(v[index].vertex));
 
 	//アンマッピング
 	v[index].resource->Unmap(0, nullptr);
 
 	//頂点バッファ設定用構造体の設定
 	v[index].vertexView.BufferLocation  = v[index].resource->GetGPUVirtualAddress();
-	v[index].vertexView.SizeInBytes	    = sizeof(VERTEX) * v[index].vertex.size();
-	v[index].vertexView.StrideInBytes   = sizeof(VERTEX);
+	v[index].vertexView.SizeInBytes	    = sizeof(v[index].vertex);
+	v[index].vertexView.StrideInBytes   = sizeof(Vertex);
 
 	return result;
 }
@@ -283,7 +284,7 @@ HRESULT Texture::CreateVertex(USHORT index, ID3D12Device * dev)
 void Texture::SetDraw(USHORT index, ID3D12GraphicsCommandList* list, UINT rootParamIndex)
 {
 	//頂点バッファビューのセット
-	list->IASetVertexBuffers(1, 1, &v[index].vertexView);
+	list->IASetVertexBuffers(0, 1, &v[index].vertexView);
 
 	//トポロジー設定
 	list->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -337,7 +338,25 @@ void Texture::Draw(USHORT index, FLOAT x, FLOAT y, ID3D12GraphicsCommandList * l
 	v[index].vertexView.StrideInBytes	= sizeof(VERTEX);*/
 
 	//頂点バッファビューのセット
-	list->IASetVertexBuffers(1, 1, &v[index].vertexView);
+	list->IASetVertexBuffers(0, 1, &v[index].vertexView);
 	
 	SetDraw(index, list, rootParamIndex);
+}
+
+// 解放処理
+void Texture::Release(ID3D12Resource * resource)
+{
+	if (resource != nullptr)
+	{
+		resource->Release();
+	}
+}
+
+// 解放処理
+void Texture::Release(ID3D12DescriptorHeap * heap)
+{
+	if (heap != nullptr)
+	{
+		heap->Release();
+	}
 }

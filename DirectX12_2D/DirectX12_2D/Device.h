@@ -2,34 +2,14 @@
 #include "Window.h"
 #include "Input.h"
 #include "Typedef.h"
-#include <DirectXMath.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 #include <memory>
 #include <vector>
+#include <map>
 
 class Device
 {
-	//サイズ
-	struct Size
-	{
-		LONG width;
-		LONG height;
-	};
-
-	//BMPデータの構造体
-	struct BMP
-	{
-		//画像サイズ
-		Size					size;
-		//bmpデータ
-		std::vector<UCHAR>		data;
-		//ヒープ
-		ID3D12DescriptorHeap*	heap;
-		//リソース
-		ID3D12Resource*			resource;
-	};
-
 	// コマンド周り
 	struct Command
 	{
@@ -120,12 +100,6 @@ class Device
 		UINT8* data;
 	};
 
-	struct Vertex
-	{
-		DirectX::XMFLOAT3 pos;
-		DirectX::XMFLOAT2 uv;
-	};
-
 public:
 	// コンストラクタ
 	Device(std::weak_ptr<Window>win, std::weak_ptr<Input>in);
@@ -192,6 +166,31 @@ private:
 	// 待機処理
 	void Wait(void);
 
+	// 解放処理
+	void Release(ID3D12Resource* resource);
+	// 解放処理
+	void Release(ID3D12DescriptorHeap* heap);
+	// 解放処理
+	void Release(ID3DBlob* blob);
+	// 解放処理
+	void Release(ID3D12PipelineState* pipe);
+	// 解放処理
+	void Release(ID3D12RootSignature* signature);
+	// 解放処理
+	void Release(ID3D12Fence* fence);
+	// 解放処理
+	void Release(IDXGIFactory4* factory);
+	// 解放処理
+	void Release(IDXGISwapChain3* swap);
+	// 解放処理
+	void Release(ID3D12CommandQueue* queue);
+	// 解放処理
+	void Release(ID3D12GraphicsCommandList* list);
+	// 解放処理
+	void Release(ID3D12CommandAllocator* allocator);
+	// 解放処理
+	void Release(ID3D12Device* dev);
+
 
 	// ウィンドウクラス
 	std::weak_ptr<Window>win;
@@ -246,9 +245,4 @@ private:
 
 	// バリア
 	D3D12_RESOURCE_BARRIER barrier;
-
-	D3D12_VERTEX_BUFFER_VIEW view;
-	ID3D12Resource* vi;
-
-	BMP bmp;
 };

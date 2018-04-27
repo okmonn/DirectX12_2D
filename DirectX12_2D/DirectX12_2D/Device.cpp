@@ -71,8 +71,6 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 
 	// バリア
 	barrier = {};
-	view = {};
-	bmp = {};
 
 
 	//エラーを出力に表示させる
@@ -93,41 +91,33 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 // デストラクタ
 Device::~Device()
 {
+	//定数バッファのアンマップ
 	con.resource->Unmap(0, nullptr);
-	con.resource->Release();
-	con.heap->Release();
-	if (pipe.vertex != nullptr)
-	{
-		pipe.vertex->Release();
-	}
-	if (pipe.pixel != nullptr)
-	{
-		pipe.pixel->Release();
-	}
-	pipe.pipeline->Release();
-	if (sig.signature != nullptr)
-	{
-		sig.signature->Release();
-	}
-	if (sig.error != nullptr)
-	{
-		sig.error->Release();
-	}
-	sig.rootSignature->Release();
-	fen.fence->Release();
-	depth.resource->Release();
-	depth.heap->Release();
+
+	Texture::Destroy();
+
+	Release(con.resource);
+	Release(con.heap);
+	Release(pipe.vertex);
+	Release(pipe.pixel);
+	Release(pipe.pipeline);
+	Release(sig.signature);
+	Release(sig.error);
+	Release(sig.rootSignature);
+	Release(fen.fence);
+	Release(depth.resource);
+	Release(depth.heap);
 	for (UINT i = 0; i < render.resource.size(); ++i)
 	{
-		render.resource[i]->Release();
+		Release(render.resource[i]);
 	}
-	render.heap->Release();
-	swap.factory->Release();
-	swap.swapChain->Release();
-	com.queue->Release();
-	com.list->Release();
-	com.allocator->Release();
-	dev->Release();
+	Release(render.heap);
+	Release(swap.factory);
+	Release(swap.swapChain);
+	Release(com.queue);
+	Release(com.list);
+	Release(com.allocator);
+	Release(dev);
 }
 
 // 初期化
@@ -159,38 +149,6 @@ void Device::Init(void)
 
 	Texture::Create();
 	Texture::GetInstance()->LoadBMP(0, "img/グラブル.bmp", dev);
-
-	/*Vertex v[] = 
-	{
-		{ { -1.0f / 2.0f, 1.0f / 2.0f,	0.0f },{ 0, 0 } },	//左上
-	{ { 1.0f / 2.0f, 1.0f / 2.0f,	0.0f },{ 1, 0 } },	//右上
-	{ { 1.0f / 2.0f, -1.0f / 2.0f,	0.0f },{ 1, 1 } },	//右下
-
-	{ { 1.0f / 2.0f, -1.0f / 2.0f,	0.0f },{ 1, 1 } },	//右下
-	{ { -1.0f / 2.0f, -1.0f / 2.0f, 0.0f },{ 0, 1 } },	//左下
-	{ { -1.0f / 2.0f,  1.0f / 2.0f,	0.0f },{ 0, 0 } }	//左上
-	};
-
-	//頂点用リソース生成
-	result = dev->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE, &CD3DX12_RESOURCE_DESC::Buffer(sizeof(v)), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&vi));
-	//送信用データ
-	UCHAR* data = nullptr;
-
-	//送信範囲
-	D3D12_RANGE range = { 0,0 };
-
-	//マッピング
-	result = vi->Map(0, &range, reinterpret_cast<void**>(&data));
-	//頂点データのコピー
-	memcpy(data, &v, (sizeof(v)));
-
-	//アンマッピング
-	vi->Unmap(0, nullptr);
-
-	//頂点バッファ設定用構造体の設定
-	view.BufferLocation = vi->GetGPUVirtualAddress();
-	view.SizeInBytes = sizeof(Vertex) * 6;
-	view.StrideInBytes = sizeof(Vertex);*/
 }
 
 // 処理
@@ -259,8 +217,7 @@ void Device::UpData(void)
 	com.list->ClearDepthStencilView(d_handle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	//描画
-	com.list->IASetVertexBuffers(0, 1, &view);
-	Texture::GetInstance()->SetDraw(0, com.list, 1);
+	Texture::GetInstance()->SetDraw(0,  com.list, 1);
 
 
 	// RenderTarget ---> Present
@@ -925,5 +882,113 @@ void Device::Wait(void)
 
 		//フェンスイベントの待機
 		WaitForSingleObject(fen.fenceEvent, INFINITE);
+	}
+}
+
+// 解放処理
+void Device::Release(ID3D12Resource * resource)
+{
+	if (resource != nullptr)
+	{
+		resource->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(ID3D12DescriptorHeap * heap)
+{
+	if (heap != nullptr)
+	{
+		heap->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(ID3DBlob * blob)
+{
+	if (blob != nullptr)
+	{
+		blob->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(ID3D12PipelineState * pipe)
+{
+	if (pipe != nullptr)
+	{
+		pipe->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(ID3D12RootSignature * signature)
+{
+	if (signature != nullptr)
+	{
+		signature->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(ID3D12Fence * fence)
+{
+	if (fence != nullptr)
+	{
+		fence->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(IDXGIFactory4 * factory)
+{
+	if (factory != nullptr)
+	{
+		factory->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(IDXGISwapChain3 * swap)
+{
+	if (swap != nullptr)
+	{
+		swap->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(ID3D12CommandQueue * queue)
+{
+	if (queue != nullptr)
+	{
+		queue->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(ID3D12GraphicsCommandList * list)
+{
+	if (list != nullptr)
+	{
+		list->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(ID3D12CommandAllocator * allocator)
+{
+	if (allocator != nullptr)
+	{
+		allocator->Release();
+	}
+}
+
+// 解放処理
+void Device::Release(ID3D12Device * dev)
+{
+	if (dev != nullptr)
+	{
+		dev->Release();
 	}
 }
