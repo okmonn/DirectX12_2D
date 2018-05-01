@@ -10,7 +10,7 @@
 #pragma comment (lib,"d3dcompiler.lib")
 
 //クリアカラーの指定
-const FLOAT clearColor[] = { 1.0f,0.0f,1.0f,1.0f };
+const FLOAT clearColor[] = { 0.0f,0.0f,0.0f,0.0f };
 
 // 機能レベル一覧
 D3D_FEATURE_LEVEL levels[] = 
@@ -71,6 +71,9 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 
 	// バリア
 	barrier = {};
+
+	x = 0.0f;
+	y = 0.0f;
 
 
 	//エラーを出力に表示させる
@@ -148,7 +151,9 @@ void Device::Init(void)
 	SetScissor();
 
 	Texture::Create();
-	Texture::GetInstance()->LoadBMP(0, "img/グラブル.bmp", dev);
+	//Texture::GetInstance()->LoadBMP(0, "img/グラブル.bmp", dev);
+	Texture::GetInstance()->LoadWIC(0, Texture::ChangeUnicode("img/rick.png"), dev);
+	Texture::GetInstance()->LoadWIC(1, Texture::ChangeUnicode("img/サンプル.png"), dev);
 }
 
 // 処理
@@ -171,6 +176,23 @@ void Device::UpData(void)
 
 	//行列データ更新
 	memcpy(con.data, &wvp, sizeof(WVP));
+
+	if (in.lock()->InputKey(DIK_RIGHT))
+	{
+		x += 1.0f;
+	}
+	else if (in.lock()->InputKey(DIK_LEFT))
+	{
+		x -= 1.0f;
+	}
+	else if (in.lock()->InputKey(DIK_DOWN))
+	{
+		y += 1.0f;
+	}
+	else if (in.lock()->InputKey(DIK_UP))
+	{
+		y -= 1.0f;
+	}
 
 	//コマンドアロケータのリセット
 	com.allocator->Reset();
@@ -217,8 +239,10 @@ void Device::UpData(void)
 	com.list->ClearDepthStencilView(d_handle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	//描画
-	Texture::GetInstance()->SetDraw(0,  com.list, 1);
-
+	//Texture::GetInstance()->Draw(0, { x, y }, {100, 100}, com.list, 1);
+	//Texture::GetInstance()->DrawRect(0, { x, y }, { 100.0f,100.0f }, com.list, 1, { 0.0f,0.0f }, { 100.0f,100.0f });
+	Texture::GetInstance()->DrawRectWIC(0, { x,y }, { 100,100 }, com.list, 1, { 0,0 }, {100,100});
+	Texture::GetInstance()->DrawRectWIC(1, { 300,50 }, { 100,100 }, com.list, 1, { 512,0 }, { 512,512 });
 
 	// RenderTarget ---> Present
 	Barrier(D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);

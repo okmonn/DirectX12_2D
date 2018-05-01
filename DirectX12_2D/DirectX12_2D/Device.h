@@ -245,4 +245,7 @@ private:
 
 	// ƒoƒŠƒA
 	D3D12_RESOURCE_BARRIER barrier;
+
+	float x;
+	float y;
 };

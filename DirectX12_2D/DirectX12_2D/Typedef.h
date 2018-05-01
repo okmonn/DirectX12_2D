@@ -28,3 +28,20 @@ struct Vertex
 	//uv
 	DirectX::XMFLOAT2 uv;
 };
+
+//“ñŸŒ³À•W
+template<typename T>
+struct Vector2
+{
+	T x;
+	T y;
+
+	Vector2(T x, T y) : x(x), y(y)
+	{}
+
+	void operator=(const T a)
+	{
+		x = a;
+		y = a;
+	}
+};

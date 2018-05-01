@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <memory>
 
 class Texture
 {
@@ -40,6 +41,19 @@ class Texture
 		D3D12_VERTEX_BUFFER_VIEW vertexView;
 	};
 
+	//WICデータ
+	struct WIC
+	{
+		//ヒープ
+		ID3D12DescriptorHeap* heap;
+		//リソース
+		ID3D12Resource* resource;
+		//デコード
+		std::unique_ptr<uint8_t[]>decode;
+		//サブ
+		D3D12_SUBRESOURCE_DATA sub;
+	};
+
 public:
 	// デストラクタ
 	~Texture();
@@ -55,14 +69,27 @@ public:
 		return s_Instance;
 	}
 
+	// ユニコード変換
+	static std::wstring ChangeUnicode(const CHAR * str);
+
 	// 読み込み
 	HRESULT LoadBMP(USHORT index, std::string fileName, ID3D12Device* dev);
+	// WIC読み込み
+	HRESULT LoadWIC(USHORT index, std::wstring fileName, ID3D12Device* dev);
 
 	// 描画準備
 	void SetDraw(USHORT index, ID3D12GraphicsCommandList* list, UINT rootParamIndex);
+	// 描画準備
+	void SetDrawWIC(USHORT index, ID3D12GraphicsCommandList* list, UINT rootParamIndex);
 	
 	// 描画
-	void Draw(USHORT index, FLOAT x, FLOAT y, ID3D12GraphicsCommandList * list, UINT rootParamIndex);
+	void Draw(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex);
+	// 描画
+	void DrawWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex);
+	// 分割描画
+	void DrawRect(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT>rect, Vector2<FLOAT>rSize);
+	// 分割描画
+	void DrawRectWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT>rect, Vector2<FLOAT>rSize);
 
 private:
 	// コンストラクタ
@@ -75,8 +102,16 @@ private:
 	// シェーダリソースビューの生成
 	HRESULT CreateShaderResourceView(USHORT index, ID3D12Device* dev);
 
+	// 定数バッファ用ヒープの生成
+	HRESULT CreateConstantHeapWIC(USHORT index, ID3D12Device* dev);
+	// シェーダリソースビューの生成
+	HRESULT CreateShaderResourceViewWIC(USHORT index, ID3D12Device* dev);
+
 	// 頂点リソースの生成
 	HRESULT CreateVertex(USHORT index, ID3D12Device* dev);
+	
+	// 頂点リソースの生成
+	HRESULT CreateVertexWIC(USHORT index, ID3D12Device* dev);
 
 	// 解放処理
 	void Release(ID3D12Resource* resource);
@@ -95,5 +130,11 @@ private:
 
 	// 頂点データ
 	std::map<USHORT, VertexData>v;
+
+	// WICデータ
+	std::map<USHORT, WIC>wic;
+
+	// 頂点データ
+	std::map<USHORT, VertexData>vic;
 };
 

@@ -36,7 +36,7 @@ Out TextureVS(VSInput input)
 	/*座標補正
 	pos.xy = float2(-1, 1) + (pos.xy / float2((640 / 2), -(480 / 2)));*/
 
-	input.pos = mul(mul(viewProjection, world), input.pos);
+	//input.pos = mul(mul(viewProjection, world), input.pos);
 
 	Out o;
 	o.svpos = input.pos;
@@ -49,5 +49,5 @@ Out TextureVS(VSInput input)
 //テクスチャ用ピクセルシェーダ
 float4 TexturePS(Out o) : SV_TARGET
 {
-	return float4(tex.Sample(smp, o.uv).abg, 1);
+	return float4(tex.Sample(smp, o.uv).rgb, 1);
 }
