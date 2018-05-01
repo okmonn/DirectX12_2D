@@ -153,7 +153,16 @@ void Device::Init(void)
 	Texture::Create();
 	//Texture::GetInstance()->LoadBMP(0, "img/ƒOƒ‰ƒuƒ‹.bmp", dev);
 	Texture::GetInstance()->LoadWIC(0, Texture::ChangeUnicode("img/rick.png"), dev);
-	Texture::GetInstance()->LoadWIC(1, Texture::ChangeUnicode("img/ƒTƒ“ƒvƒ‹.png"), dev);
+	Texture::GetInstance()->LoadWIC(1, Texture::ChangeUnicode("img/rick.png"), dev);
+}
+
+// •`‰æ
+void Device::Draw(void)
+{
+	//Texture::GetInstance()->Draw(0, { x, y }, {100, 100}, com.list, 1);
+	//Texture::GetInstance()->DrawRect(0, { x, y }, { 100.0f,100.0f }, com.list, 1, { 0.0f,0.0f }, { 100.0f,100.0f });
+	Texture::GetInstance()->DrawRectWIC(0, { x,y }, { 100,100 }, com.list, 1, { 0,0 }, { 100,100 }, true);
+	Texture::GetInstance()->DrawRectWIC(1, { 100,0 }, { 100,100 }, com.list, 1, { 0,0 }, { 100,100 });
 }
 
 // ˆ—
@@ -239,10 +248,7 @@ void Device::UpData(void)
 	com.list->ClearDepthStencilView(d_handle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	//•`‰æ
-	//Texture::GetInstance()->Draw(0, { x, y }, {100, 100}, com.list, 1);
-	//Texture::GetInstance()->DrawRect(0, { x, y }, { 100.0f,100.0f }, com.list, 1, { 0.0f,0.0f }, { 100.0f,100.0f });
-	Texture::GetInstance()->DrawRectWIC(0, { x,y }, { 100,100 }, com.list, 1, { 0,0 }, {100,100});
-	Texture::GetInstance()->DrawRectWIC(1, { 300,50 }, { 100,100 }, com.list, 1, { 512,0 }, { 512,512 });
+	Draw();
 
 	// RenderTarget ---> Present
 	Barrier(D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);

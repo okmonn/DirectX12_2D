@@ -87,9 +87,9 @@ public:
 	// •`‰æ
 	void DrawWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex);
 	// •ªŠ„•`‰æ
-	void DrawRect(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT>rect, Vector2<FLOAT>rSize);
+	void DrawRect(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
 	// •ªŠ„•`‰æ
-	void DrawRectWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT>rect, Vector2<FLOAT>rSize);
+	void DrawRectWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
 
 private:
 	// ƒRƒ“ƒXƒgƒ‰ƒNƒ^

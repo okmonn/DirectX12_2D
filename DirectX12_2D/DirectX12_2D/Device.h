@@ -109,6 +109,9 @@ public:
 	// ‰Šú‰»
 	void Init(void);
 
+	// •`‰æ
+	void Draw(void);
+
 	// ˆ—
 	void UpData(void);
 private:
