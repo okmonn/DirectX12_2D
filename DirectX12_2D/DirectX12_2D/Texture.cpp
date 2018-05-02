@@ -318,7 +318,7 @@ HRESULT Texture::CreateShaderResourceViewWIC(USHORT index, ID3D12Device * dev)
 
 	//シェーダリソースビュー設定用構造体の設定
 	D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
-	desc.Format						= DXGI_FORMAT::DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.Format						= wic[index].resource->GetDesc().Format;
 	desc.ViewDimension				= D3D12_SRV_DIMENSION::D3D12_SRV_DIMENSION_TEXTURE2D;
 	desc.Texture2D.MipLevels		= 1;
 	desc.Texture2D.MostDetailedMip	= 0;

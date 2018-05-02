@@ -153,7 +153,7 @@ void Device::Init(void)
 	Texture::Create();
 	
 	Texture::GetInstance()->LoadWIC(0, Texture::ChangeUnicode("img/rick.png"), dev);
-	Texture::GetInstance()->LoadWIC(1, Texture::ChangeUnicode("img/a.png"), dev);
+	Texture::GetInstance()->LoadWIC(1, Texture::ChangeUnicode("img/bar_top.png"), dev);
 }
 
 // •`‰æ
