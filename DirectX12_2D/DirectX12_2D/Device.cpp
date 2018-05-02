@@ -10,7 +10,7 @@
 #pragma comment (lib,"d3dcompiler.lib")
 
 //クリアカラーの指定
-const FLOAT clearColor[] = { 0.0f,0.0f,0.0f,0.0f };
+const FLOAT clearColor[] = { 1.0f,0.0f,0.0f,0.0f };
 
 // 機能レベル一覧
 D3D_FEATURE_LEVEL levels[] = 
@@ -151,9 +151,9 @@ void Device::Init(void)
 	SetScissor();
 
 	Texture::Create();
-	//Texture::GetInstance()->LoadBMP(0, "img/グラブル.bmp", dev);
+	
 	Texture::GetInstance()->LoadWIC(0, Texture::ChangeUnicode("img/rick.png"), dev);
-	Texture::GetInstance()->LoadWIC(1, Texture::ChangeUnicode("img/rick.png"), dev);
+	Texture::GetInstance()->LoadWIC(1, Texture::ChangeUnicode("img/a.png"), dev);
 }
 
 // 描画
@@ -724,7 +724,7 @@ HRESULT Device::CreatePipeline(void)
 
 	//ブレンドステート設定用構造体
 	D3D12_BLEND_DESC descBS = {};
-	descBS.AlphaToCoverageEnable			= FALSE;
+	descBS.AlphaToCoverageEnable			= TRUE;
 	descBS.IndependentBlendEnable			= FALSE;
 	for (UINT i = 0; i < swap.bufferCnt; i++)
 	{

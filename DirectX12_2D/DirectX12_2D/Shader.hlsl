@@ -49,5 +49,12 @@ Out TextureVS(VSInput input)
 //テクスチャ用ピクセルシェーダ
 float4 TexturePS(Out o) : SV_TARGET
 {
-	return float4(tex.Sample(smp, o.uv).rgb, 1);
+	//return float4(tex.Sample(smp, o.uv).rgb, 0);
+    float4 t = tex.Sample(smp, o.uv);
+    if (t.a <= 0.0)
+    {
+        discard;
+    }
+        
+    return t;
 }
