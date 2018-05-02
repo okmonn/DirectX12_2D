@@ -1,6 +1,4 @@
 #include "Device.h"
-#include "Typedef.h"
-#include "Texture.h"
 #include "d3dx12.h"
 #include <d3dcompiler.h>
 #include <tchar.h>
@@ -22,7 +20,7 @@ D3D_FEATURE_LEVEL levels[] =
 };
 
 // コンストラクタ
-Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), in(in)
+Device::Device(std::weak_ptr<Window> win) : win(win)
 {
 	//参照結果
 	result = S_OK;
@@ -72,9 +70,6 @@ Device::Device(std::weak_ptr<Window> win, std::weak_ptr<Input> in) : win(win), i
 	// バリア
 	barrier = {};
 
-	x = 0.0f;
-	y = 0.0f;
-
 
 	//エラーを出力に表示させる
 #ifdef _DEBUG
@@ -96,8 +91,6 @@ Device::~Device()
 {
 	//定数バッファのアンマップ
 	con.resource->Unmap(0, nullptr);
-
-	Texture::Destroy();
 
 	Release(con.resource);
 	Release(con.heap);
@@ -149,59 +142,28 @@ void Device::Init(void)
 	SetViewPort();
 
 	SetScissor();
-
-	Texture::Create();
-	
-	Texture::GetInstance()->LoadWIC(0, Texture::ChangeUnicode("img/rick.png"), dev);
-	Texture::GetInstance()->LoadWIC(1, Texture::ChangeUnicode("img/bar_top.png"), dev);
 }
 
-// 描画
-void Device::Draw(void)
+// 描画セット
+void Device::Set(void)
 {
-	//Texture::GetInstance()->Draw(0, { x, y }, {100, 100}, com.list, 1);
-	//Texture::GetInstance()->DrawRect(0, { x, y }, { 100.0f,100.0f }, com.list, 1, { 0.0f,0.0f }, { 100.0f,100.0f });
-	Texture::GetInstance()->DrawRectWIC(0, { x,y }, { 100,100 }, com.list, 1, { 0,0 }, { 100,100 }, true);
-	Texture::GetInstance()->DrawRectWIC(1, { 100,0 }, { 100,100 }, com.list, 1, { 0,0 }, { 100,100 });
-}
-
-// 処理
-void Device::UpData(void)
-{
-	if (in.lock()->InputKey(DIK_RIGHT) == TRUE)
+	/*if (in.lock()->InputKey(DIK_RIGHT) == TRUE)
 	{
-		//回転
-		angle++;
-		//行列更新
-		wvp.world = DirectX::XMMatrixRotationY(RAD(angle));
+	//回転
+	angle++;
+	//行列更新
+	wvp.world = DirectX::XMMatrixRotationY(RAD(angle));
 	}
 	else if (in.lock()->InputKey(DIK_LEFT) == TRUE)
 	{
-		//回転
-		angle--;
-		//行列更新
-		wvp.world = DirectX::XMMatrixRotationY(RAD(angle));
-	}
+	//回転
+	angle--;
+	//行列更新
+	wvp.world = DirectX::XMMatrixRotationY(RAD(angle));
+	}*/
 
 	//行列データ更新
 	memcpy(con.data, &wvp, sizeof(WVP));
-
-	if (in.lock()->InputKey(DIK_RIGHT))
-	{
-		x += 1.0f;
-	}
-	else if (in.lock()->InputKey(DIK_LEFT))
-	{
-		x -= 1.0f;
-	}
-	else if (in.lock()->InputKey(DIK_DOWN))
-	{
-		y += 1.0f;
-	}
-	else if (in.lock()->InputKey(DIK_UP))
-	{
-		y -= 1.0f;
-	}
 
 	//コマンドアロケータのリセット
 	com.allocator->Reset();
@@ -246,10 +208,11 @@ void Device::UpData(void)
 
 	//深度ステンシルビューのクリア
 	com.list->ClearDepthStencilView(d_handle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+}
 
-	//描画
-	Draw();
-
+// 実行
+void Device::Do(void)
+{
 	// RenderTarget ---> Present
 	Barrier(D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
@@ -265,6 +228,18 @@ void Device::UpData(void)
 	swap.swapChain->Present(1, 0);
 
 	Wait();
+}
+
+// デバイスの取得
+ID3D12Device * Device::GetDevice(void)
+{
+	return dev;
+}
+
+// コマンドリストの取得
+ID3D12GraphicsCommandList * Device::GetComList(void)
+{
+	return com.list;
 }
 
 //ワールドビュープロジェクションのセット

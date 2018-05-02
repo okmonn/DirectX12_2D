@@ -1,6 +1,5 @@
 #pragma once
 #include "Window.h"
-#include "Input.h"
 #include "Typedef.h"
 #include <d3d12.h>
 #include <dxgi1_4.h>
@@ -102,18 +101,25 @@ class Device
 
 public:
 	// コンストラクタ
-	Device(std::weak_ptr<Window>win, std::weak_ptr<Input>in);
+	Device(std::weak_ptr<Window>win);
 	// デストラクタ
 	~Device();
 
 	// 初期化
 	void Init(void);
 
-	// 描画
-	void Draw(void);
+	// 描画セット
+	void Set(void);
 
-	// 処理
-	void UpData(void);
+	// 実行
+	void Do(void);
+
+	// デバイスの取得
+	ID3D12Device* GetDevice(void);
+
+	// コマンドリストの取得
+	ID3D12GraphicsCommandList* GetComList(void);
+
 private:
 	//ワールドビュープロジェクションのセット
 	void SetWorldViewProjection(void);
@@ -198,9 +204,6 @@ private:
 	// ウィンドウクラス
 	std::weak_ptr<Window>win;
 
-	// インプットクラス
-	std::weak_ptr<Input>in;
-
 	// 参照結果
 	HRESULT result;
 
@@ -248,7 +251,4 @@ private:
 
 	// バリア
 	D3D12_RESOURCE_BARRIER barrier;
-
-	float x;
-	float y;
 };

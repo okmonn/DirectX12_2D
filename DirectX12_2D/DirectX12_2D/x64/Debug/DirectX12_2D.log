@@ -1,0 +1,15 @@
+﻿  Window.cpp
+  WICTextureLoader12.cpp
+  Texture.cpp
+c:\users\1601271\documents\github\directx12_2d\directx12_2d\directx12_2d\texture.cpp(532): warning C4244: '引数': 'LONG_PTR' から 'UINT' への変換です。データが失われる可能性があります。
+  Player.cpp
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\um\dinput.h: DIRECTINPUT_VERSION undefined. Defaulting to version 0x0800
+  Main.cpp
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\um\dinput.h: DIRECTINPUT_VERSION undefined. Defaulting to version 0x0800
+c:\users\1601271\documents\github\directx12_2d\directx12_2d\directx12_2d\main.cpp(68): warning C4244: 'return': 'WPARAM' から 'int' への変換です。データが失われる可能性があります。
+  Input.cpp
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\um\dinput.h: DIRECTINPUT_VERSION undefined. Defaulting to version 0x0800
+  Device.cpp
+  c:\program files (x86)\windows kits\10\include\10.0.16299.0\um\dinput.h: DIRECTINPUT_VERSION undefined. Defaulting to version 0x0800
+  コードを生成中...
+  DirectX12_2D.vcxproj -> C:\Users\1601271\Documents\GitHub\DirectX12_2D\DirectX12_2D\x64\Debug\DirectX12_2D.exe

@@ -1,10 +1,5 @@
 #pragma once
-#include "Typedef.h"
-#include <d3d12.h>
-#include <string>
-#include <vector>
-#include <map>
-#include <memory>
+#include "Device.h"
 
 class Texture
 {
@@ -55,63 +50,54 @@ class Texture
 	};
 
 public:
+	// コンストラクタ
+	Texture(std::weak_ptr<Device>dev);
 	// デストラクタ
 	~Texture();
-
-	// インスタンス化
-	static void Create(void);
-	// 破棄
-	static void Destroy(void);
-
-	// インスタンス変数の取得
-	static Texture* GetInstance(void)
-	{
-		return s_Instance;
-	}
 
 	// ユニコード変換
 	static std::wstring ChangeUnicode(const CHAR * str);
 
+	// 画像IDのセット
+	int SetID(void);
+
 	// 読み込み
-	HRESULT LoadBMP(USHORT index, std::string fileName, ID3D12Device* dev);
+	HRESULT LoadBMP(USHORT index, std::string fileName);
 	// WIC読み込み
-	HRESULT LoadWIC(USHORT index, std::wstring fileName, ID3D12Device* dev);
+	HRESULT LoadWIC(USHORT index, std::wstring fileName);
 
 	// 描画準備
-	void SetDraw(USHORT index, ID3D12GraphicsCommandList* list, UINT rootParamIndex);
+	void SetDraw(USHORT index);
 	// 描画準備
-	void SetDrawWIC(USHORT index, ID3D12GraphicsCommandList* list, UINT rootParamIndex);
+	void SetDrawWIC(USHORT index);
 	
 	// 描画
-	void Draw(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex);
+	void Draw(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size);
 	// 描画
-	void DrawWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex);
+	void DrawWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size);
 	// 分割描画
-	void DrawRect(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
+	void DrawRect(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
 	// 分割描画
-	void DrawRectWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
+	void DrawRectWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
 
 private:
-	// コンストラクタ
-	Texture();
-
 	// 定数バッファ用のヒープの生成	
-	HRESULT CreateConstantHeap(USHORT index, ID3D12Device* dev);
+	HRESULT CreateConstantHeap(USHORT index);
 	// 定数バッファの生成
-	HRESULT CreateConstant(USHORT index, ID3D12Device* dev);
+	HRESULT CreateConstant(USHORT index);
 	// シェーダリソースビューの生成
-	HRESULT CreateShaderResourceView(USHORT index, ID3D12Device* dev);
+	HRESULT CreateShaderResourceView(USHORT index);
 
 	// 定数バッファ用ヒープの生成
-	HRESULT CreateConstantHeapWIC(USHORT index, ID3D12Device* dev);
+	HRESULT CreateConstantHeapWIC(USHORT index);
 	// シェーダリソースビューの生成
-	HRESULT CreateShaderResourceViewWIC(USHORT index, ID3D12Device* dev);
+	HRESULT CreateShaderResourceViewWIC(USHORT index);
 
 	// 頂点リソースの生成
-	HRESULT CreateVertex(USHORT index, ID3D12Device* dev);
+	HRESULT CreateVertex(USHORT index);
 	
 	// 頂点リソースの生成
-	HRESULT CreateVertexWIC(USHORT index, ID3D12Device* dev);
+	HRESULT CreateVertexWIC(USHORT index);
 
 	// 解放処理
 	void Release(ID3D12Resource* resource);
@@ -119,8 +105,11 @@ private:
 	void Release(ID3D12DescriptorHeap* heap);
 
 
-	// インスタンス変数
-	static Texture* s_Instance;
+	// デバイス
+	std::weak_ptr<Device>dev;
+
+	// 画像ID
+	int id;
 
 	// 参照結果
 	HRESULT result;

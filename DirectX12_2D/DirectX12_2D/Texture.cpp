@@ -5,13 +5,14 @@
 
 #pragma comment (lib,"d3d12.lib")
 
-Texture* Texture::s_Instance = nullptr;
-
 // コンストラクタ
-Texture::Texture()
+Texture::Texture(std::weak_ptr<Device>dev) : dev(dev)
 {
 	//WICの初期処理
 	CoInitialize(nullptr);
+
+	// 画像ID
+	id = 0;
 
 	//参照結果の初期化
 	result = S_OK;
@@ -76,25 +77,6 @@ Texture::~Texture()
 	}
 }
 
-// インスタンス化
-void Texture::Create(void)
-{
-	if (s_Instance == nullptr)
-	{
-		s_Instance = new Texture;
-	}
-}
-
-// 破棄
-void Texture::Destroy(void)
-{
-	if (s_Instance != nullptr)
-	{
-		delete s_Instance;
-	}
-	s_Instance = nullptr;
-}
-
 // ユニコード変換
 std::wstring Texture::ChangeUnicode(const CHAR * str)
 {
@@ -110,8 +92,14 @@ std::wstring Texture::ChangeUnicode(const CHAR * str)
 	return wstr;
 }
 
+// 画像IDのセット
+int Texture::SetID(void)
+{
+	return id++;
+}
+
 // 読み込み
-HRESULT Texture::LoadBMP(USHORT index, std::string fileName, ID3D12Device* dev)
+HRESULT Texture::LoadBMP(USHORT index, std::string fileName)
 {
 	//BMPヘッダー構造体
 	BITMAPINFOHEADER header = {};
@@ -178,30 +166,30 @@ HRESULT Texture::LoadBMP(USHORT index, std::string fileName, ID3D12Device* dev)
 	//ファイルを閉じる
 	fclose(file);
 
-	result = CreateShaderResourceView(index, dev);
-	result = CreateVertex(index, dev);
+	result = CreateShaderResourceView(index);
+	result = CreateVertex(index);
 
 	return result;
 }
 
 // WIC読み込み
-HRESULT Texture::LoadWIC(USHORT index, std::wstring fileName, ID3D12Device * dev)
+HRESULT Texture::LoadWIC(USHORT index, std::wstring fileName)
 {
-	result = DirectX::LoadWICTextureFromFile(dev, fileName.c_str(), &wic[index].resource, wic[index].decode, wic[index].sub);
+	result = DirectX::LoadWICTextureFromFile(dev.lock()->GetDevice(), fileName.c_str(), &wic[index].resource, wic[index].decode, wic[index].sub);
 	if (FAILED(result))
 	{
 		OutputDebugString(_T("\nWICテクスチャの読み込み：失敗\n"));
 		return result;
 	}
 
-	result = CreateShaderResourceViewWIC(index, dev);
-	result = CreateVertexWIC(index, dev);
+	result = CreateShaderResourceViewWIC(index);
+	result = CreateVertexWIC(index);
 
 	return result;
 }
 
 // 定数バッファ用のヒープの生成	
-HRESULT Texture::CreateConstantHeap(USHORT index, ID3D12Device* dev)
+HRESULT Texture::CreateConstantHeap(USHORT index)
 {
 	//ヒープ設定用構造体の設定
 	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
@@ -211,7 +199,7 @@ HRESULT Texture::CreateConstantHeap(USHORT index, ID3D12Device* dev)
 	desc.Type				= D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 	//ヒープ生成
-	result = dev->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&bmp[index].heap));
+	result = dev.lock()->GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&bmp[index].heap));
 	if (FAILED(result))
 	{
 		OutputDebugString(_T("\nテクスチャの定数バッファ用ヒープの生成：失敗\n"));
@@ -222,9 +210,9 @@ HRESULT Texture::CreateConstantHeap(USHORT index, ID3D12Device* dev)
 }
 
 // 定数バッファの生成
-HRESULT Texture::CreateConstant(USHORT index, ID3D12Device* dev)
+HRESULT Texture::CreateConstant(USHORT index)
 {
-	if (CreateConstantHeap(index, dev) != S_OK)
+	if (CreateConstantHeap(index) != S_OK)
 	{
 		OutputDebugString(_T("\nテクスチャの定数バッファ用ヒープの生成：失敗\n"));
 		return S_FALSE;
@@ -250,7 +238,7 @@ HRESULT Texture::CreateConstant(USHORT index, ID3D12Device* dev)
 	desc.Layout					= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
 	//リソース生成
-	result = dev->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&bmp[index].resource));
+	result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&bmp[index].resource));
 	if (FAILED(result))
 	{
 		OutputDebugString(_T("\nテクスチャの定数バッファ用リソースの生成：失敗\n"));
@@ -261,9 +249,9 @@ HRESULT Texture::CreateConstant(USHORT index, ID3D12Device* dev)
 }
 
 // シェーダリソースビューの生成
-HRESULT Texture::CreateShaderResourceView(USHORT index, ID3D12Device * dev)
+HRESULT Texture::CreateShaderResourceView(USHORT index)
 {
-	if (CreateConstant(index, dev) != S_OK)
+	if (CreateConstant(index) != S_OK)
 	{
 		OutputDebugString(_T("\nテクスチャの定数バッファ用リソースの生成：失敗\n"));
 		return S_FALSE;
@@ -281,13 +269,13 @@ HRESULT Texture::CreateShaderResourceView(USHORT index, ID3D12Device * dev)
 	D3D12_CPU_DESCRIPTOR_HANDLE handle = bmp[index].heap->GetCPUDescriptorHandleForHeapStart();
 
 	//シェーダーリソースビューの生成
-	dev->CreateShaderResourceView(bmp[index].resource, &desc, handle);
+	dev.lock()->GetDevice()->CreateShaderResourceView(bmp[index].resource, &desc, handle);
 
 	return S_OK;
 }
 
 // 定数バッファ用ヒープの生成
-HRESULT Texture::CreateConstantHeapWIC(USHORT index, ID3D12Device * dev)
+HRESULT Texture::CreateConstantHeapWIC(USHORT index)
 {
 	//ヒープ設定用構造体の設定
 	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
@@ -297,7 +285,7 @@ HRESULT Texture::CreateConstantHeapWIC(USHORT index, ID3D12Device * dev)
 	desc.Type				= D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 	//ヒープ生成
-	result = dev->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&wic[index].heap));
+	result = dev.lock()->GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&wic[index].heap));
 	if (FAILED(result))
 	{
 		OutputDebugString(_T("\nWICテクスチャの定数バッファ用ヒープの生成：失敗\n"));
@@ -308,9 +296,9 @@ HRESULT Texture::CreateConstantHeapWIC(USHORT index, ID3D12Device * dev)
 }
 
 // シェーダリソースビューの生成
-HRESULT Texture::CreateShaderResourceViewWIC(USHORT index, ID3D12Device * dev)
+HRESULT Texture::CreateShaderResourceViewWIC(USHORT index)
 {
-	if (CreateConstantHeapWIC(index, dev) != S_OK)
+	if (CreateConstantHeapWIC(index) != S_OK)
 	{
 		OutputDebugString(_T("\nWICテクスチャの定数バッファ用ヒープの生成：失敗\n"));
 		return S_FALSE;
@@ -328,13 +316,13 @@ HRESULT Texture::CreateShaderResourceViewWIC(USHORT index, ID3D12Device * dev)
 	D3D12_CPU_DESCRIPTOR_HANDLE handle = wic[index].heap->GetCPUDescriptorHandleForHeapStart();
 
 	//シェーダーリソースビューの生成
-	dev->CreateShaderResourceView(wic[index].resource, &desc, handle);
+	dev.lock()->GetDevice()->CreateShaderResourceView(wic[index].resource, &desc, handle);
 
 	return S_OK;
 }
 
 // 頂点リソースの生成
-HRESULT Texture::CreateVertex(USHORT index, ID3D12Device * dev)
+HRESULT Texture::CreateVertex(USHORT index)
 {
 	//配列のメモリ確保
 	v[index].data = nullptr;
@@ -365,7 +353,7 @@ HRESULT Texture::CreateVertex(USHORT index, ID3D12Device * dev)
 	desc.Layout					= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
 	//頂点用リソース生成
-	result = dev->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&v[index].resource));
+	result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&v[index].resource));
 	if (FAILED(result))
 	{
 		OutputDebugString(_T("\nテクスチャの頂点バッファ用リソースの生成：失敗\n"));
@@ -398,7 +386,7 @@ HRESULT Texture::CreateVertex(USHORT index, ID3D12Device * dev)
 }
 
 // 頂点リソースの生成
-HRESULT Texture::CreateVertexWIC(USHORT index, ID3D12Device * dev)
+HRESULT Texture::CreateVertexWIC(USHORT index)
 {
 	//配列のメモリ確保
 	vic[index].data = nullptr;
@@ -429,7 +417,7 @@ HRESULT Texture::CreateVertexWIC(USHORT index, ID3D12Device * dev)
 	desc.Layout = D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
 	//頂点用リソース生成
-	result = dev->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&vic[index].resource));
+	result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&vic[index].resource));
 	if (FAILED(result))
 	{
 		OutputDebugString(_T("\nテクスチャの頂点バッファ用リソースの生成：失敗\n"));
@@ -459,13 +447,13 @@ HRESULT Texture::CreateVertexWIC(USHORT index, ID3D12Device * dev)
 }
 
 // 描画準備
-void Texture::SetDraw(USHORT index, ID3D12GraphicsCommandList* list, UINT rootParamIndex)
+void Texture::SetDraw(USHORT index)
 {
 	//頂点バッファビューのセット
-	list->IASetVertexBuffers(0, 1, &v[index].vertexView);
+	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &v[index].vertexView);
 
 	//トポロジー設定
-	list->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	dev.lock()->GetComList()->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	//ボックス設定用構造体の設定
 	D3D12_BOX box = {};
@@ -488,23 +476,23 @@ void Texture::SetDraw(USHORT index, ID3D12GraphicsCommandList* list, UINT rootPa
 	D3D12_GPU_DESCRIPTOR_HANDLE handle = bmp[index].heap->GetGPUDescriptorHandleForHeapStart();
 
 	//ヒープのセット
-	list->SetDescriptorHeaps(1, &bmp[index].heap);
+	dev.lock()->GetComList()->SetDescriptorHeaps(1, &bmp[index].heap);
 
 	//ディスクラプターテーブルのセット
-	list->SetGraphicsRootDescriptorTable(rootParamIndex, handle);
+	dev.lock()->GetComList()->SetGraphicsRootDescriptorTable(1, handle);
 
 	//描画
-	list->DrawInstanced(6, 1, 0, 0);
+	dev.lock()->GetComList()->DrawInstanced(6, 1, 0, 0);
 }
 
 // 描画準備
-void Texture::SetDrawWIC(USHORT index, ID3D12GraphicsCommandList * list, UINT rootParamIndex)
+void Texture::SetDrawWIC(USHORT index)
 {
 	//頂点バッファビューのセット
-	list->IASetVertexBuffers(0, 1, &vic[index].vertexView);
+	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &vic[index].vertexView);
 
 	//トポロジー設定
-	list->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	dev.lock()->GetComList()->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	//リソース設定用構造体
 	D3D12_RESOURCE_DESC desc = {};
@@ -531,17 +519,17 @@ void Texture::SetDrawWIC(USHORT index, ID3D12GraphicsCommandList * list, UINT ro
 	D3D12_GPU_DESCRIPTOR_HANDLE handle = wic[index].heap->GetGPUDescriptorHandleForHeapStart();
 
 	//ヒープのセット
-	list->SetDescriptorHeaps(1, &wic[index].heap);
+	dev.lock()->GetComList()->SetDescriptorHeaps(1, &wic[index].heap);
 
 	//ディスクラプターテーブルのセット
-	list->SetGraphicsRootDescriptorTable(rootParamIndex, handle);
+	dev.lock()->GetComList()->SetGraphicsRootDescriptorTable(1, handle);
 
 	//描画
-	list->DrawInstanced(6, 1, 0, 0);
+	dev.lock()->GetComList()->DrawInstanced(6, 1, 0, 0);
 }
 
 // 描画
-void Texture::Draw(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12GraphicsCommandList * list, UINT rootParamIndex)
+void Texture::Draw(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size)
 {
 	v[index].vertex[0] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f}, {0.0f, 0.0f} };//左上
 	v[index].vertex[1] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f}, {1.0f, 0.0f} };//右上
@@ -558,11 +546,11 @@ void Texture::Draw(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, ID3D12Gr
 	v[index].vertexView.SizeInBytes		= sizeof(v[index].vertex);
 	v[index].vertexView.StrideInBytes	= sizeof(Vertex);
 	
-	SetDraw(index, list, rootParamIndex);
+	SetDraw(index);
 }
 
 // 描画
-void Texture::DrawWIC(USHORT index, Vector2<FLOAT> pos, Vector2<FLOAT> size, ID3D12GraphicsCommandList * list, UINT rootParamIndex)
+void Texture::DrawWIC(USHORT index, Vector2<FLOAT> pos, Vector2<FLOAT> size)
 {
 	vic[index].vertex[0] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ 0.0f, 0.0f } };//左上
 	vic[index].vertex[1] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ 1.0f, 0.0f } };//右上
@@ -579,11 +567,11 @@ void Texture::DrawWIC(USHORT index, Vector2<FLOAT> pos, Vector2<FLOAT> size, ID3
 	vic[index].vertexView.SizeInBytes		= sizeof(vic[index].vertex);
 	vic[index].vertexView.StrideInBytes		= sizeof(Vertex);
 
-	SetDrawWIC(index, list, rootParamIndex);
+	SetDrawWIC(index);
 }
 
 // 分割描画
-void Texture::DrawRect(USHORT index, Vector2<FLOAT> pos, Vector2<FLOAT> size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT> rect, Vector2<FLOAT> rSize, bool turn)
+void Texture::DrawRect(USHORT index, Vector2<FLOAT> pos, Vector2<FLOAT> size, Vector2<FLOAT> rect, Vector2<FLOAT> rSize, bool turn)
 {
 	if (turn == false)
 	{
@@ -613,13 +601,13 @@ void Texture::DrawRect(USHORT index, Vector2<FLOAT> pos, Vector2<FLOAT> size, ID
 	v[index].vertexView.StrideInBytes	= sizeof(Vertex);
 
 	//頂点バッファビューのセット
-	list->IASetVertexBuffers(0, 1, &v[index].vertexView);
+	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &v[index].vertexView);
 
-	SetDraw(index, list, rootParamIndex);
+	SetDraw(index);
 }
 
 // 分割描画
-void Texture::DrawRectWIC(USHORT index, Vector2<FLOAT> pos, Vector2<FLOAT> size, ID3D12GraphicsCommandList * list, UINT rootParamIndex, Vector2<FLOAT> rect, Vector2<FLOAT> rSize, bool turn)
+void Texture::DrawRectWIC(USHORT index, Vector2<FLOAT> pos, Vector2<FLOAT> size, Vector2<FLOAT> rect, Vector2<FLOAT> rSize, bool turn)
 {
 	if (turn == false)
 	{
@@ -649,9 +637,9 @@ void Texture::DrawRectWIC(USHORT index, Vector2<FLOAT> pos, Vector2<FLOAT> size,
 	vic[index].vertexView.StrideInBytes		= sizeof(Vertex);
 
 	//頂点バッファビューのセット
-	list->IASetVertexBuffers(0, 1, &vic[index].vertexView);
+	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &vic[index].vertexView);
 
-	SetDrawWIC(index, list, rootParamIndex);
+	SetDrawWIC(index);
 }
 
 // 解放処理

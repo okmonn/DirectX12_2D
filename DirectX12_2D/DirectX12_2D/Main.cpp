@@ -1,6 +1,5 @@
 #define EXPORT_MAIN
 #include "Main.h"
-#include <d3d12.h>
 
 
 // インスタンス処理
@@ -13,7 +12,12 @@ void Create(void)
 	input = std::make_shared<Input>(win);
 
 	//デバイスクラスのインスタンス
-	dev = std::make_shared<Device>(win, input);
+	dev = std::make_shared<Device>(win);
+
+	// テクスチャ
+	tex = std::make_shared<Texture>(dev);
+
+	pl = std::make_shared<Player>(input, tex);
 }
 
 // メモリ解放処理
@@ -51,8 +55,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				break;
 			}
 
-			//アップデート処理
-			dev->UpData();
+			dev->Set();
+			pl->Draw();
+			dev->Do();
 		}
 	}
 

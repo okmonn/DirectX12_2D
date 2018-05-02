@@ -7,9 +7,10 @@
 #endif
 
 #include "Window.h"
+#include "Texture.h"
 #include "Input.h"
+#include "Player.h"
 #include "Device.h"
-#include <memory>
 
 // インスタンス処理
 void Create(void);
@@ -26,3 +27,9 @@ EXTERN_MAIN std::shared_ptr<Input>input;
 
 // デバイスクラス参照
 EXTERN_MAIN std::shared_ptr<Device>dev;
+
+// テクスチャ
+EXTERN_MAIN std::shared_ptr<Texture>tex;
+
+// プレイヤー
+EXTERN_MAIN std::shared_ptr<Player>pl;
