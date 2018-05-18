@@ -9,19 +9,6 @@ class Texture
 		LONG width;
 		LONG height;
 	};
-	
-	//BMPデータの構造体
-	struct BMP
-	{
-		//画像サイズ
-		Size					size;
-		//bmpデータ
-		std::vector<UCHAR>		data;
-		//ヒープ
-		ID3D12DescriptorHeap*	heap;
-		//リソース
-		ID3D12Resource*			resource;
-	};
 
 	//頂点データ
 	struct VertexData
@@ -35,6 +22,21 @@ class Texture
 		// 頂点バッファビュー
 		D3D12_VERTEX_BUFFER_VIEW vertexView;
 	};
+	
+	//BMPデータの構造体
+	struct BMP
+	{
+		//画像サイズ
+		Size					size;
+		//bmpデータ
+		std::vector<UCHAR>		data;
+		//ヒープ
+		ID3D12DescriptorHeap*	heap;
+		//リソース
+		ID3D12Resource*			resource;
+		//頂点データ
+		VertexData v;
+	};
 
 	//WICデータ
 	struct WIC
@@ -47,6 +49,8 @@ class Texture
 		std::unique_ptr<uint8_t[]>decode;
 		//サブ
 		D3D12_SUBRESOURCE_DATA sub;
+		//頂点データ
+		VertexData v;
 	};
 
 public:
@@ -58,46 +62,43 @@ public:
 	// ユニコード変換
 	static std::wstring ChangeUnicode(const CHAR * str);
 
-	// 画像IDのセット
-	int SetID(void);
-
 	// 読み込み
-	HRESULT LoadBMP(USHORT index, std::string fileName);
+	HRESULT LoadBMP(USHORT* index, std::string fileName);
 	// WIC読み込み
-	HRESULT LoadWIC(USHORT index, std::wstring fileName);
+	HRESULT LoadWIC(USHORT* index, std::wstring fileName);
 
 	// 描画準備
-	void SetDraw(USHORT index);
+	void SetDraw(USHORT* index);
 	// 描画準備
-	void SetDrawWIC(USHORT index);
+	void SetDrawWIC(USHORT* index);
 	
 	// 描画
-	void Draw(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size);
+	void Draw(USHORT* index, Vector2<FLOAT>pos, Vector2<FLOAT>size);
 	// 描画
-	void DrawWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size);
+	void DrawWIC(USHORT* index, Vector2<FLOAT>pos, Vector2<FLOAT>size);
 	// 分割描画
-	void DrawRect(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
+	void DrawRect(USHORT* index, Vector2<FLOAT>pos, Vector2<FLOAT>size, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
 	// 分割描画
-	void DrawRectWIC(USHORT index, Vector2<FLOAT>pos, Vector2<FLOAT>size, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
+	void DrawRectWIC(USHORT* index, Vector2<FLOAT>pos, Vector2<FLOAT>size, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
 
 private:
 	// 定数バッファ用のヒープの生成	
-	HRESULT CreateConstantHeap(USHORT index);
+	HRESULT CreateConstantHeap(USHORT* index, std::string fileName);
 	// 定数バッファの生成
-	HRESULT CreateConstant(USHORT index);
+	HRESULT CreateConstant(USHORT* index, std::string fileName);
 	// シェーダリソースビューの生成
-	HRESULT CreateShaderResourceView(USHORT index);
+	HRESULT CreateShaderResourceView(USHORT* index, std::string fileName);
 
 	// 定数バッファ用ヒープの生成
-	HRESULT CreateConstantHeapWIC(USHORT index);
+	HRESULT CreateConstantHeapWIC(USHORT* index);
 	// シェーダリソースビューの生成
-	HRESULT CreateShaderResourceViewWIC(USHORT index);
+	HRESULT CreateShaderResourceViewWIC(USHORT* index);
 
 	// 頂点リソースの生成
-	HRESULT CreateVertex(USHORT index);
+	HRESULT CreateVertex(USHORT* index);
 	
 	// 頂点リソースの生成
-	HRESULT CreateVertexWIC(USHORT index);
+	HRESULT CreateVertexWIC(USHORT* index);
 
 	// 解放処理
 	void Release(ID3D12Resource* resource);
@@ -108,22 +109,16 @@ private:
 	// デバイス
 	std::weak_ptr<Device>dev;
 
-	// 画像ID
-	int id;
-
 	// 参照結果
 	HRESULT result;
 
-	// BMPデータ
-	std::map<USHORT, BMP>bmp;
+	// BMPデータの起源
+	std::map<std::string, BMP>origin;
 
-	// 頂点データ
-	std::map<USHORT, VertexData>v;
+	// BMPデータ
+	std::map<USHORT*, BMP>bmp;
 
 	// WICデータ
-	std::map<USHORT, WIC>wic;
-
-	// 頂点データ
-	std::map<USHORT, VertexData>vic;
+	std::map<USHORT*, WIC>wic;
 };
 

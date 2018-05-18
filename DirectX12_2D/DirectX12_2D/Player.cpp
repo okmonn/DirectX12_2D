@@ -40,8 +40,6 @@ Player::~Player()
 // 読み込み
 void Player::Load(std::string fileName)
 {
-	id = tex.lock()->SetID();
-
 	FILE* file;
 
 	//ファイル開らく
@@ -86,10 +84,9 @@ void Player::Load(std::string fileName)
 
 	std::string path = "アクション/" + header.path;
 
-	tex.lock()->LoadWIC(id, Texture::ChangeUnicode(path.c_str()));
+	tex.lock()->LoadWIC(&id, Texture::ChangeUnicode(path.c_str()));
 
-	back = tex.lock()->SetID();
-	tex.lock()->LoadWIC(back, Texture::ChangeUnicode("img/splatterhouse.png"));
+	tex.lock()->LoadWIC(&back, Texture::ChangeUnicode("img/splatterhouse.png"));
 }
 
 // 描画
@@ -111,14 +108,18 @@ void Player::Draw(void)
 				loop = false;
 			}
 		}
+		else
+		{
+			SetMode("Walk", reverse);
+		}
 	}
 
-	tex.lock()->DrawRectWIC(id, {pos.x,pos.y},
+	tex.lock()->DrawRectWIC(&id, {pos.x,pos.y},
 		{ (FLOAT)(cut[mode][index].rect.GetRight() - cut[mode][index].rect.GetLeft()) * 2.0f, (FLOAT)(cut[mode][index].rect.GetBottom() - cut[mode][index].rect.GetTop()) * 2.0f },
 		{ (FLOAT)cut[mode][index].rect.GetLeft() , (FLOAT)cut[mode][index].rect.GetTop() },
 		{ (FLOAT)(cut[mode][index].rect.GetRight() - cut[mode][index].rect.GetLeft()), (FLOAT)(cut[mode][index].rect.GetBottom() - cut[mode][index].rect.GetTop()) }, reverse);
 
-	tex.lock()->DrawWIC(back, { 0.0f, 0.0f }, { (FLOAT)WINDOW_X, (FLOAT)WINDOW_Y });
+	tex.lock()->DrawWIC(&back, { 0.0f, 0.0f }, { (FLOAT)WINDOW_X, (FLOAT)WINDOW_Y });
 }
 
 // 処理
@@ -186,6 +187,10 @@ void Player::Walk(void)
 	{
 		SetMode("Walk", true);
 		pos.x -= 1.0f;
+	}
+	else if (in.lock()->InputKey(DIK_RETURN))
+	{
+		SetMode("Punch", reverse);
 	}
 }
 

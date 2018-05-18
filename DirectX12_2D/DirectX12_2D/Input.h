@@ -15,6 +15,10 @@ public:
 	// デストラクタ
 	~Input();
 
+	// キー入力
+	BOOL InputKey(UINT data);
+
+private:
 	// インプットの生成
 	HRESULT CreateInput(void);
 	// インプットデバイスの生成
@@ -23,10 +27,6 @@ public:
 	// インプットデバイスをキーボードにセット
 	HRESULT SetInputDevice(void);
 
-	// キー入力
-	BOOL InputKey(UINT data);
-
-private:
 	// ウィンドウクラス参照
 	std::weak_ptr<Window>win;
 
@@ -41,4 +41,6 @@ private:
 
 	// キー情報
 	BYTE key[256];
+
+	bool flag;
 };

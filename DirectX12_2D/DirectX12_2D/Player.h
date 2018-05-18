@@ -189,9 +189,9 @@ private:
 	std::weak_ptr<Texture>tex;
 
 	// ‰æ‘œID
-	int id;
+	USHORT id;
 
-	int back;
+	USHORT back;
 
 	// ƒwƒbƒ_[
 	ImageHeader header;
