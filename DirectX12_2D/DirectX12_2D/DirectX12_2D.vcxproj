@@ -119,6 +119,7 @@
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="Player.cpp" />
+    <ClCompile Include="Sound.cpp" />
     <ClCompile Include="Texture.cpp" />
     <ClCompile Include="WICTextureLoader12.cpp" />
     <ClCompile Include="Window.cpp" />
@@ -130,6 +131,7 @@
     <ClInclude Include="KeyTbl.h" />
     <ClInclude Include="Main.h" />
     <ClInclude Include="Player.h" />
+    <ClInclude Include="Sound.h" />
     <ClInclude Include="Texture.h" />
     <ClInclude Include="Typedef.h" />
     <ClInclude Include="WICTextureLoader12.h" />

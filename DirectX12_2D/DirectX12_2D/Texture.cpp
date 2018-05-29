@@ -11,7 +11,7 @@ Texture::Texture(std::weak_ptr<Device>dev) : dev(dev)
 	//WICの初期処理
 	CoInitialize(nullptr);
 
-	//参照結果の初期化
+	//参照結果
 	result = S_OK;
 
 	//起源
@@ -39,24 +39,23 @@ Texture::Texture(std::weak_ptr<Device>dev) : dev(dev)
 // デストラクタ
 Texture::~Texture()
 {
-	//定数バッファ
 	for (auto itr = bmp.begin(); itr != bmp.end(); ++itr)
 	{
-		Release(itr->second.v.resource);
-		Release(itr->second.resource);
-		Release(itr->second.heap);
+		RELEASE(itr->second.vertex.resource);
+		RELEASE(itr->second.resource);
+		RELEASE(itr->second.heap);
 	}
 	for (auto itr = origin.begin(); itr != origin.end(); ++itr)
 	{
-		Release(itr->second.resource);
-		Release(itr->second.heap);
+		RELEASE(itr->second.resource);
+		RELEASE(itr->second.heap);
 	}
 	for (auto itr = wic.begin(); itr != wic.end(); ++itr)
 	{
 		itr->second.decode.release();
-		Release(itr->second.v.resource);
-		Release(itr->second.resource);
-		Release(itr->second.heap);
+		RELEASE(itr->second.vertex.resource);
+		RELEASE(itr->second.resource);
+		RELEASE(itr->second.heap);
 	}
 }
 
@@ -83,10 +82,9 @@ HRESULT Texture::LoadBMP(USHORT* index, std::string fileName)
 		if (itr->first == fileName)
 		{
 			bmp[index] = itr->second;
-			result = CreateShaderResourceView(index, fileName);
-			result = CreateVertex(index);
 
 			return result;
+			break;
 		}
 	}
 
@@ -155,10 +153,10 @@ HRESULT Texture::LoadBMP(USHORT* index, std::string fileName)
 	//ファイルを閉じる
 	fclose(file);
 
-	bmp[index] = origin[fileName];
-
 	result = CreateShaderResourceView(index, fileName);
 	result = CreateVertex(index);
+
+	bmp[index] = origin[fileName];
 
 	return result;
 }
@@ -177,6 +175,32 @@ HRESULT Texture::LoadWIC(USHORT* index, std::wstring fileName)
 	result = CreateVertexWIC(index);
 
 	return result;
+}
+
+// ディスクリプターのセット
+void Texture::SetDescriptorBMP(USHORT * index)
+{
+	//ヒープの先頭ハンドルを取得
+	D3D12_GPU_DESCRIPTOR_HANDLE handle = bmp[index].heap->GetGPUDescriptorHandleForHeapStart();
+
+	//ヒープのセット
+	dev.lock()->GetComList()->SetDescriptorHeaps(1, &bmp[index].heap);
+
+	//ディスクラプターテーブルのセット
+	dev.lock()->GetComList()->SetGraphicsRootDescriptorTable(1, handle);
+}
+
+// ディスクリプターのセット
+void Texture::SetDescriptorWIC(USHORT* index)
+{
+	//ヒープの先頭ハンドルを取得
+	D3D12_GPU_DESCRIPTOR_HANDLE handle = wic[index].heap->GetGPUDescriptorHandleForHeapStart();
+
+	//ヒープのセット
+	dev.lock()->GetComList()->SetDescriptorHeaps(1, &wic[index].heap);
+
+	//ディスクリプターテーブルのセット
+	dev.lock()->GetComList()->SetGraphicsRootDescriptorTable(1, handle);
 }
 
 // 定数バッファ用のヒープの生成	
@@ -203,10 +227,10 @@ HRESULT Texture::CreateConstantHeap(USHORT* index, std::string fileName)
 // 定数バッファの生成
 HRESULT Texture::CreateConstant(USHORT* index, std::string fileName)
 {
-	if (CreateConstantHeap(index, fileName) != S_OK)
+	result = CreateConstantHeap(index, fileName);
+	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nテクスチャの定数バッファ用ヒープの生成：失敗\n"));
-		return S_FALSE;
+		return result;
 	}
 
 	//ヒープステート設定用構造体の設定
@@ -229,11 +253,13 @@ HRESULT Texture::CreateConstant(USHORT* index, std::string fileName)
 	desc.Layout					= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
 	//リソース生成
-	result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&origin[fileName].resource));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nテクスチャの定数バッファ用リソースの生成：失敗\n"));
-		return result;
+		result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&origin[fileName].resource));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nテクスチャの定数バッファ用リソースの生成：失敗\n"));
+			return result;
+		}
 	}
 
 	return result;
@@ -242,10 +268,10 @@ HRESULT Texture::CreateConstant(USHORT* index, std::string fileName)
 // シェーダリソースビューの生成
 HRESULT Texture::CreateShaderResourceView(USHORT* index, std::string fileName)
 {
-	if (CreateConstant(index, fileName) != S_OK)
+	result = CreateConstant(index, fileName);
+	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nテクスチャの定数バッファ用リソースの生成：失敗\n"));
-		return S_FALSE;
+		return result;
 	}
 
 	//シェーダリソースビュー設定用構造体の設定
@@ -276,11 +302,13 @@ HRESULT Texture::CreateConstantHeapWIC(USHORT* index)
 	desc.Type				= D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 	//ヒープ生成
-	result = dev.lock()->GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&wic[index].heap));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nWICテクスチャの定数バッファ用ヒープの生成：失敗\n"));
-		return result;
+		result = dev.lock()->GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&wic[index].heap));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nWICテクスチャの定数バッファ用ヒープの生成：失敗\n"));
+			return result;
+		}
 	}
 
 	return result;
@@ -289,10 +317,10 @@ HRESULT Texture::CreateConstantHeapWIC(USHORT* index)
 // シェーダリソースビューの生成
 HRESULT Texture::CreateShaderResourceViewWIC(USHORT* index)
 {
-	if (CreateConstantHeapWIC(index) != S_OK)
+	result = CreateConstantHeapWIC(index);
+	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nWICテクスチャの定数バッファ用ヒープの生成：失敗\n"));
-		return S_FALSE;
+		return result;
 	}
 
 	//シェーダリソースビュー設定用構造体の設定
@@ -315,14 +343,6 @@ HRESULT Texture::CreateShaderResourceViewWIC(USHORT* index)
 // 頂点リソースの生成
 HRESULT Texture::CreateVertex(USHORT* index)
 {
-	//配列のメモリ確保
-	bmp[index].v.data = nullptr;
-
-	for (UINT i = 0; i < 6; ++i)
-	{
-		bmp[index].v.vertex[i] = {};
-	}
-
 	//ヒープ設定用構造体の設定
 	D3D12_HEAP_PROPERTIES prop = {};
 	prop.Type					= D3D12_HEAP_TYPE::D3D12_HEAP_TYPE_UPLOAD;
@@ -334,7 +354,7 @@ HRESULT Texture::CreateVertex(USHORT* index)
 	//リソース設定用構造体の設定
 	D3D12_RESOURCE_DESC desc = {};
 	desc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
-	desc.Width					= sizeof(bmp[index].v.vertex);//((sizeof(v[index].vertex) + 0xff) &~0xff);
+	desc.Width					= (sizeof(bmp[index].vertex.vertex));//((sizeof(v[index].vertex) + 0xff) &~0xff);
 	desc.Height					= 1;
 	desc.DepthOrArraySize		= 1;
 	desc.MipLevels				= 1;
@@ -343,35 +363,36 @@ HRESULT Texture::CreateVertex(USHORT* index)
 	desc.Flags					= D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE;
 	desc.Layout					= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-	//頂点用リソース生成
-	result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&bmp[index].v.resource));
-	if (FAILED(result))
+	//リソース生成
 	{
-		OutputDebugString(_T("\nテクスチャの頂点バッファ用リソースの生成：失敗\n"));
-		return result;
+		result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&bmp[index].vertex.resource));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nテクスチャの頂点バッファ用リソースの生成：失敗\n"));
+			return result;
+		}
 	}
 
 	//送信範囲
 	D3D12_RANGE range = { 0,0 };
 
 	//マッピング
-	result = bmp[index].v.resource->Map(0, &range, reinterpret_cast<void**>(&bmp[index].v.data));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\n頂点用リソースのマッピング：失敗\n"));
-		return result;
+		result = bmp[index].vertex.resource->Map(0, &range, reinterpret_cast<void**>(&bmp[index].vertex.data));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\n頂点用リソースのマッピング：失敗\n"));
+			return result;
+		}
+
+		//頂点データのコピー
+		memcpy(bmp[index].vertex.data, &bmp[index].vertex.vertex, sizeof(bmp[index].vertex.vertex));
 	}
 
-	//頂点データのコピー
-	memcpy(bmp[index].v.data, &bmp[index].v.vertex, sizeof(bmp[index].v.vertex));
-
-	//アンマッピング
-	//v[index].resource->Unmap(0, nullptr);
-
 	//頂点バッファ設定用構造体の設定
-	bmp[index].v.vertexView.BufferLocation  = bmp[index].v.resource->GetGPUVirtualAddress();
-	bmp[index].v.vertexView.SizeInBytes	    = sizeof(bmp[index].v.vertex);
-	bmp[index].v.vertexView.StrideInBytes   = sizeof(Vertex);
+	bmp[index].vertex.view.BufferLocation	= bmp[index].vertex.resource->GetGPUVirtualAddress();
+	bmp[index].vertex.view.SizeInBytes		= sizeof(bmp[index].vertex.vertex);
+	bmp[index].vertex.view.StrideInBytes	= sizeof(Vertex);
 
 	return result;
 }
@@ -379,73 +400,63 @@ HRESULT Texture::CreateVertex(USHORT* index)
 // 頂点リソースの生成
 HRESULT Texture::CreateVertexWIC(USHORT* index)
 {
-	//配列のメモリ確保
-	wic[index].v.data = nullptr;
-
-	for (UINT i = 0; i < 6; ++i)
-	{
-		wic[index].v.vertex[i] = {};
-	}
-
 	//ヒープ設定用構造体の設定
 	D3D12_HEAP_PROPERTIES prop = {};
-	prop.Type = D3D12_HEAP_TYPE::D3D12_HEAP_TYPE_UPLOAD;
-	prop.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY::D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-	prop.MemoryPoolPreference = D3D12_MEMORY_POOL::D3D12_MEMORY_POOL_UNKNOWN;
-	prop.CreationNodeMask = 1;
-	prop.VisibleNodeMask = 1;
+	prop.Type					= D3D12_HEAP_TYPE::D3D12_HEAP_TYPE_UPLOAD;
+	prop.CPUPageProperty		= D3D12_CPU_PAGE_PROPERTY::D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	prop.MemoryPoolPreference	= D3D12_MEMORY_POOL::D3D12_MEMORY_POOL_UNKNOWN;
+	prop.CreationNodeMask		= 1;
+	prop.VisibleNodeMask		= 1;
 
 	//リソース設定用構造体の設定
 	D3D12_RESOURCE_DESC desc = {};
-	desc.Dimension = D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
-	desc.Width = sizeof(wic[index].v.vertex);//((sizeof(v[index].vertex) + 0xff) &~0xff);
-	desc.Height = 1;
-	desc.DepthOrArraySize = 1;
-	desc.MipLevels = 1;
-	desc.Format = DXGI_FORMAT::DXGI_FORMAT_UNKNOWN;
-	desc.SampleDesc.Count = 1;
-	desc.Flags = D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE;
-	desc.Layout = D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	desc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
+	desc.Width					= sizeof(wic[index].vertex.vertex);//((sizeof(v[index].vertex) + 0xff) &~0xff);
+	desc.Height					= 1;
+	desc.DepthOrArraySize		= 1;
+	desc.MipLevels				= 1;
+	desc.Format					= DXGI_FORMAT::DXGI_FORMAT_UNKNOWN;
+	desc.SampleDesc.Count		= 1;
+	desc.Flags					= D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE;
+	desc.Layout					= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-	//頂点用リソース生成
-	result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&wic[index].v.resource));
-	if (FAILED(result))
+	//リソース生成
 	{
-		OutputDebugString(_T("\nテクスチャの頂点バッファ用リソースの生成：失敗\n"));
-		return result;
+		result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&wic[index].vertex.resource));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nテクスチャの頂点バッファ用リソースの生成：失敗\n"));
+			return result;
+		}
 	}
 
 	//送信範囲
 	D3D12_RANGE range = { 0,0 };
 
 	//マッピング
-	result = wic[index].v.resource->Map(0, &range, reinterpret_cast<void**>(&wic[index].v.data));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nWIC頂点用リソースのマッピング：失敗\n"));
-		return result;
+		result = wic[index].vertex.resource->Map(0, &range, reinterpret_cast<void**>(&wic[index].vertex.data));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nWIC頂点用リソースのマッピング：失敗\n"));
+			return result;
+		}
 	}
 
 	//頂点データのコピー
-	memcpy(wic[index].v.data, &wic[index].v.vertex, sizeof(wic[index].v.vertex));
+	memcpy(wic[index].vertex.data, &wic[index].vertex.vertex, sizeof(wic[index].vertex.vertex));
 
 	//頂点バッファ設定用構造体の設定
-	wic[index].v.vertexView.BufferLocation = wic[index].v.resource->GetGPUVirtualAddress();
-	wic[index].v.vertexView.SizeInBytes = sizeof(wic[index].v.vertex);
-	wic[index].v.vertexView.StrideInBytes = sizeof(Vertex);
+	wic[index].vertex.view.BufferLocation	= wic[index].vertex.resource->GetGPUVirtualAddress();
+	wic[index].vertex.view.SizeInBytes		= sizeof(wic[index].vertex.vertex);
+	wic[index].vertex.view.StrideInBytes	= sizeof(Vertex);
 
 	return result;
 }
 
 // 描画準備
-void Texture::SetDraw(USHORT* index)
+void Texture::SetDrawBMP(USHORT* index)
 {
-	//頂点バッファビューのセット
-	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &bmp[index].v.vertexView);
-
-	//トポロジー設定
-	dev.lock()->GetComList()->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
 	//ボックス設定用構造体の設定
 	D3D12_BOX box = {};
 	box.back	= 1;
@@ -456,35 +467,24 @@ void Texture::SetDraw(USHORT* index)
 	box.top		= 0;
 
 	//サブリソースに書き込み
-	result = bmp[index].resource->WriteToSubresource(0, &box, &bmp[index].data[0], (box.right * 4), (box.bottom * 4));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nテクスチャのサブリソースへの書き込み：失敗\n"));
-		return;
+		result = bmp[index].resource->WriteToSubresource(0, &box, &bmp[index].data[0], (box.right * 4), (box.bottom * 4));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nテクスチャのサブリソースへの書き込み：失敗\n"));
+			return;
+		}
 	}
 
-	//ヒープの先頭ハンドルを取得
-	D3D12_GPU_DESCRIPTOR_HANDLE handle = bmp[index].heap->GetGPUDescriptorHandleForHeapStart();
-
 	//ヒープのセット
-	dev.lock()->GetComList()->SetDescriptorHeaps(1, &bmp[index].heap);
-
-	//ディスクラプターテーブルのセット
-	dev.lock()->GetComList()->SetGraphicsRootDescriptorTable(1, handle);
-
-	//描画
-	dev.lock()->GetComList()->DrawInstanced(6, 1, 0, 0);
+	{
+		SetDescriptorBMP(index);
+	}
 }
 
 // 描画準備
 void Texture::SetDrawWIC(USHORT* index)
 {
-	//頂点バッファビューのセット
-	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &wic[index].v.vertexView);
-
-	//トポロジー設定
-	dev.lock()->GetComList()->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
 	//リソース設定用構造体
 	D3D12_RESOURCE_DESC desc = {};
 	desc = wic[index].resource->GetDesc();
@@ -499,66 +499,79 @@ void Texture::SetDrawWIC(USHORT* index)
 	box.top		= 0;
 
 	//サブリソースに書き込み
-	result = wic[index].resource->WriteToSubresource(0, &box, wic[index].decode.get(), wic[index].sub.RowPitch, wic[index].sub.SlicePitch);
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("WICサブリソースへの書き込み：失敗\n"));
-		return;
+		result = wic[index].resource->WriteToSubresource(0, &box, wic[index].decode.get(), wic[index].sub.RowPitch, wic[index].sub.SlicePitch);
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("WICサブリソースへの書き込み：失敗\n"));
+			return;
+		}
 	}
 
-	//ヒープの先頭ハンドルを取得
-	D3D12_GPU_DESCRIPTOR_HANDLE handle = wic[index].heap->GetGPUDescriptorHandleForHeapStart();
-
 	//ヒープのセット
-	dev.lock()->GetComList()->SetDescriptorHeaps(1, &wic[index].heap);
+	{
+		SetDescriptorWIC(index);
+	}
+}
 
-	//ディスクラプターテーブルのセット
-	dev.lock()->GetComList()->SetGraphicsRootDescriptorTable(1, handle);
+// 描画
+void Texture::DrawBMP(USHORT* index, Vector2<FLOAT>pos, Vector2<FLOAT>size)
+{
+	bmp[index].vertex.vertex[0] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			  1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			 0.0f },{ 0.0f, 0.0f } };//左上
+	bmp[index].vertex.vertex[1] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			 0.0f },{ 1.0f, 0.0f } };//右上
+	bmp[index].vertex.vertex[2] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ 1.0f, 1.0f } };//右下
+	bmp[index].vertex.vertex[3] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ 1.0f, 1.0f } };//右下
+	bmp[index].vertex.vertex[4] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			  1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ 0.0f, 1.0f } };//左下
+	bmp[index].vertex.vertex[5] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			  1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			 0.0f },{ 0.0f, 0.0f } };//左上
+
+	//頂点データのコピー
+	memcpy(bmp[index].vertex.data, &bmp[index].vertex.vertex, (sizeof(bmp[index].vertex.vertex)));
+
+	//頂点バッファ設定用構造体の設定
+	bmp[index].vertex.view.BufferLocation = bmp[index].vertex.resource->GetGPUVirtualAddress();
+	bmp[index].vertex.view.SizeInBytes = sizeof(bmp[index].vertex.vertex);
+	bmp[index].vertex.view.StrideInBytes = sizeof(Vertex);
+
+	//頂点バッファビューのセット
+	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &bmp[index].vertex.view);
+
+	//トポロジー設定
+	dev.lock()->GetComList()->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	SetDrawBMP(index);
 
 	//描画
 	dev.lock()->GetComList()->DrawInstanced(6, 1, 0, 0);
 }
 
 // 描画
-void Texture::Draw(USHORT* index, Vector2<FLOAT>pos, Vector2<FLOAT>size)
-{
-	bmp[index].v.vertex[0] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f}, {0.0f, 0.0f} };//左上
-	bmp[index].v.vertex[1] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f}, {1.0f, 0.0f} };//右上
-	bmp[index].v.vertex[2] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f}, {1.0f, 1.0f} };//右下
-	bmp[index].v.vertex[3] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f}, {1.0f, 1.0f} };//右下
-	bmp[index].v.vertex[4] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f}, {0.0f, 1.0f} };//左下
-	bmp[index].v.vertex[5] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f}, {0.0f, 0.0f} };//左上
-
-	//頂点データのコピー
-	memcpy(bmp[index].v.data, &bmp[index].v.vertex, (sizeof(bmp[index].v.vertex)));
-
-	//頂点バッファ設定用構造体の設定
-	bmp[index].v.vertexView.BufferLocation	= bmp[index].v.resource->GetGPUVirtualAddress();
-	bmp[index].v.vertexView.SizeInBytes		= sizeof(bmp[index].v.vertex);
-	bmp[index].v.vertexView.StrideInBytes	= sizeof(Vertex);
-	
-	SetDraw(index);
-}
-
-// 描画
 void Texture::DrawWIC(USHORT* index, Vector2<FLOAT> pos, Vector2<FLOAT> size)
 {
-	wic[index].v.vertex[0] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ 0.0f, 0.0f } };//左上
-	wic[index].v.vertex[1] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ 1.0f, 0.0f } };//右上
-	wic[index].v.vertex[2] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ 1.0f, 1.0f } };//右下
-	wic[index].v.vertex[3] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ 1.0f, 1.0f } };//右下
-	wic[index].v.vertex[4] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ 0.0f, 1.0f } };//左下
-	wic[index].v.vertex[5] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ 0.0f, 0.0f } };//左上
+	wic[index].vertex.vertex[0] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ 0.0f, 0.0f } };//左上
+	wic[index].vertex.vertex[1] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ 1.0f, 0.0f } };//右上
+	wic[index].vertex.vertex[2] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ 1.0f, 1.0f } };//右下
+	wic[index].vertex.vertex[3] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ 1.0f, 1.0f } };//右下
+	wic[index].vertex.vertex[4] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ 0.0f, 1.0f } };//左下
+	wic[index].vertex.vertex[5] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ 0.0f, 0.0f } };//左上
 
-	//頂点データのコピー
-	memcpy(wic[index].v.data, &wic[index].v.vertex, (sizeof(wic[index].v.vertex)));
+																																									  //頂点データのコピー
+	memcpy(wic[index].vertex.data, &wic[index].vertex.vertex, (sizeof(wic[index].vertex.vertex)));
 
 	//頂点バッファ設定用構造体の設定
-	wic[index].v.vertexView.BufferLocation	= wic[index].v.resource->GetGPUVirtualAddress();
-	wic[index].v.vertexView.SizeInBytes		= sizeof(wic[index].v.vertex);
-	wic[index].v.vertexView.StrideInBytes		= sizeof(Vertex);
+	wic[index].vertex.view.BufferLocation = wic[index].vertex.resource->GetGPUVirtualAddress();
+	wic[index].vertex.view.SizeInBytes = sizeof(wic[index].vertex.vertex);
+	wic[index].vertex.view.StrideInBytes = sizeof(Vertex);
+
+	//頂点バッファビューのセット
+	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &wic[index].vertex.view);
+
+	//トポロジー設定
+	dev.lock()->GetComList()->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	SetDrawWIC(index);
+
+	//描画
+	dev.lock()->GetComList()->DrawInstanced(6, 1, 0, 0);
 }
 
 // 分割描画
@@ -566,35 +579,41 @@ void Texture::DrawRect(USHORT* index, Vector2<FLOAT> pos, Vector2<FLOAT> size, V
 {
 	if (turn == false)
 	{
-		bmp[index].v.vertex[0] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f },{ rect.x / (FLOAT)bmp[index].size.width,             rect.y / (FLOAT)bmp[index].size.height } };//左上
-		bmp[index].v.vertex[1] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width, rect.y / (FLOAT)bmp[index].size.height } };//右上
-		bmp[index].v.vertex[2] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width, (rect.y + (FLOAT)rSize.y) / bmp[index].size.height } };//右下
-		bmp[index].v.vertex[3] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width, (rect.y + (FLOAT)rSize.y) / bmp[index].size.height } };//右下
-		bmp[index].v.vertex[4] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)bmp[index].size.width,             (rect.y + rSize.y) / (FLOAT)bmp[index].size.height } };//左下
-		bmp[index].v.vertex[5] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f },{ rect.x / (FLOAT)bmp[index].size.width,             rect.y / (FLOAT)bmp[index].size.height } };//左上
+		bmp[index].vertex.vertex[0] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			  1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			 0.0f },{ rect.x / (FLOAT)bmp[index].size.width,              rect.y / (FLOAT)bmp[index].size.height } };//左上
+		bmp[index].vertex.vertex[1] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			 0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width,   rect.y / (FLOAT)bmp[index].size.height } };//右上
+		bmp[index].vertex.vertex[2] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width, (rect.y + (FLOAT)rSize.y) / bmp[index].size.height } };//右下
+		bmp[index].vertex.vertex[3] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width, (rect.y + (FLOAT)rSize.y) / bmp[index].size.height } };//右下
+		bmp[index].vertex.vertex[4] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			  1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)bmp[index].size.width,             (rect.y + rSize.y) / (FLOAT)bmp[index].size.height } };//左下
+		bmp[index].vertex.vertex[5] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			  1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			 0.0f },{ rect.x / (FLOAT)bmp[index].size.width,              rect.y / (FLOAT)bmp[index].size.height } };//左上
 	}
 	else
 	{
-		bmp[index].v.vertex[0] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width, rect.y / (FLOAT)bmp[index].size.height } };//左上
-		bmp[index].v.vertex[1] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f },{ rect.x / (FLOAT)bmp[index].size.width,             rect.y / (FLOAT)bmp[index].size.height } };//右上
-		bmp[index].v.vertex[2] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)bmp[index].size.width,             (rect.y + rSize.y) / (FLOAT)bmp[index].size.height } };//右下
-		bmp[index].v.vertex[3] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)bmp[index].size.width,             (rect.y + rSize.y) / (FLOAT)bmp[index].size.height } };//右下
-		bmp[index].v.vertex[4] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width, (rect.y + (FLOAT)rSize.y) / bmp[index].size.height } };//左下
-		bmp[index].v.vertex[5] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			 1.0f - (pos.y / (float)(WINDOW_Y / 2)),			0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width, rect.y / (FLOAT)bmp[index].size.height } };//左上
+		bmp[index].vertex.vertex[0] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			  1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			 0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width,   rect.y / (FLOAT)bmp[index].size.height } };//左上
+		bmp[index].vertex.vertex[1] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			 0.0f },{ rect.x / (FLOAT)bmp[index].size.width,              rect.y / (FLOAT)bmp[index].size.height } };//右上
+		bmp[index].vertex.vertex[2] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)bmp[index].size.width,             (rect.y + rSize.y) / (FLOAT)bmp[index].size.height } };//右下
+		bmp[index].vertex.vertex[3] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)bmp[index].size.width,             (rect.y + rSize.y) / (FLOAT)bmp[index].size.height } };//右下
+		bmp[index].vertex.vertex[4] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			  1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width,  (rect.y + (FLOAT)rSize.y) / bmp[index].size.height } };//左下
+		bmp[index].vertex.vertex[5] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			  1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			 0.0f },{ (rect.x + rSize.x) / (FLOAT)bmp[index].size.width,   rect.y / (FLOAT)bmp[index].size.height } };//左上
 	}
 
 	//頂点データのコピー
-	memcpy(bmp[index].v.data, &bmp[index].v.vertex, (sizeof(bmp[index].v.vertex)));
+	memcpy(bmp[index].vertex.data, &bmp[index].vertex.vertex, (sizeof(bmp[index].vertex.vertex)));
 
 	//頂点バッファ設定用構造体の設定
-	bmp[index].v.vertexView.BufferLocation	= bmp[index].v.resource->GetGPUVirtualAddress();
-	bmp[index].v.vertexView.SizeInBytes		= sizeof(bmp[index].v.vertex);
-	bmp[index].v.vertexView.StrideInBytes	= sizeof(Vertex);
+	bmp[index].vertex.view.BufferLocation = bmp[index].vertex.resource->GetGPUVirtualAddress();
+	bmp[index].vertex.view.SizeInBytes = sizeof(bmp[index].vertex.vertex);
+	bmp[index].vertex.view.StrideInBytes = sizeof(Vertex);
 
 	//頂点バッファビューのセット
-	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &bmp[index].v.vertexView);
+	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &bmp[index].vertex.view);
 
-	SetDraw(index);
+	//トポロジー設定
+	dev.lock()->GetComList()->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	SetDrawBMP(index);
+
+	//描画
+	dev.lock()->GetComList()->DrawInstanced(6, 1, 0, 0);
 }
 
 // 分割描画
@@ -602,51 +621,39 @@ void Texture::DrawRectWIC(USHORT* index, Vector2<FLOAT> pos, Vector2<FLOAT> size
 {
 	if (turn == false)
 	{
-		wic[index].v.vertex[0] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),             rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左上
-		wic[index].v.vertex[1] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width), rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右上
-		wic[index].v.vertex[2] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width), (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右下
-		wic[index].v.vertex[3] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width), (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右下
-		wic[index].v.vertex[4] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),             (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左下
-		wic[index].v.vertex[5] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),             rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左上
+		wic[index].vertex.vertex[0] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),             rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左上
+		wic[index].vertex.vertex[1] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width),  rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右上
+		wic[index].vertex.vertex[2] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width), (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右下
+		wic[index].vertex.vertex[3] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width), (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右下
+		wic[index].vertex.vertex[4] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),            (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左下
+		wic[index].vertex.vertex[5] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),             rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左上
 	}
 	else
 	{
-		wic[index].v.vertex[0] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width), rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左上
-		wic[index].v.vertex[1] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),             rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右上
-		wic[index].v.vertex[2] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),             (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右下
-		wic[index].v.vertex[3] = { { ((pos.x + size.x) / (float)(WINDOW_X / 2)) - 1.0f,  1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),             (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右下
-		wic[index].v.vertex[4] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - ((pos.y + size.y) / (float)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width), (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左下
-		wic[index].v.vertex[5] = { { (pos.x / (float)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (float)(WINDOW_Y / 2)),			  0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width), rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左上
+		wic[index].vertex.vertex[0] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width),  rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左上
+		wic[index].vertex.vertex[1] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),             rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右上
+		wic[index].vertex.vertex[2] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),            (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右下
+		wic[index].vertex.vertex[3] = { { ((pos.x + size.x) / (FLOAT)(WINDOW_X / 2)) - 1.0f,   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ rect.x / (FLOAT)(wic[index].resource->GetDesc().Width),            (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//右下
+		wic[index].vertex.vertex[4] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width), (rect.y + rSize.y) / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左下
+		wic[index].vertex.vertex[5] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ (rect.x + rSize.x) / (FLOAT)(wic[index].resource->GetDesc().Width),  rect.y / (FLOAT)(wic[index].resource->GetDesc().Height) } };//左上
 	}
 
 	//頂点データのコピー
-	memcpy(wic[index].v.data, &wic[index].v.vertex, (sizeof(wic[index].v.vertex)));
+	memcpy(wic[index].vertex.data, &wic[index].vertex.vertex, (sizeof(wic[index].vertex.vertex)));
 
 	//頂点バッファ設定用構造体の設定
-	wic[index].v.vertexView.BufferLocation	= wic[index].v.resource->GetGPUVirtualAddress();
-	wic[index].v.vertexView.SizeInBytes		= sizeof(wic[index].v.vertex);
-	wic[index].v.vertexView.StrideInBytes		= sizeof(Vertex);
+	wic[index].vertex.view.BufferLocation = wic[index].vertex.resource->GetGPUVirtualAddress();
+	wic[index].vertex.view.SizeInBytes = sizeof(wic[index].vertex.vertex);
+	wic[index].vertex.view.StrideInBytes = sizeof(Vertex);
 
 	//頂点バッファビューのセット
-	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &wic[index].v.vertexView);
+	dev.lock()->GetComList()->IASetVertexBuffers(0, 1, &wic[index].vertex.view);
+
+	//トポロジー設定
+	dev.lock()->GetComList()->IASetPrimitiveTopology(D3D12_PRIMITIVE_TOPOLOGY::D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	SetDrawWIC(index);
-}
 
-// 解放処理
-void Texture::Release(ID3D12Resource * resource)
-{
-	if (resource != nullptr)
-	{
-		resource->Release();
-	}
-}
-
-// 解放処理
-void Texture::Release(ID3D12DescriptorHeap * heap)
-{
-	if (heap != nullptr)
-	{
-		heap->Release();
-	}
+	//描画
+	dev.lock()->GetComList()->DrawInstanced(6, 1, 0, 0);
 }

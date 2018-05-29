@@ -54,7 +54,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			{
 				break;
 			}
-
 			dev->Set();
 			pl->Draw();
 			dev->Do();

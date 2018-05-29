@@ -11,6 +11,11 @@
 // ラジアン変換
 #define RAD(X) (X) * (PI / 180.0f)
 
+// 解放処理マクロ
+#ifndef _RELEASE
+#define RELEASE(descriptor)      { if (descriptor != nullptr) { (descriptor)->Release(); (descriptor) = nullptr; } }
+#endif
+
 // 空間行列
 struct WVP
 {

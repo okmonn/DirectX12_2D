@@ -84,9 +84,9 @@ void Player::Load(std::string fileName)
 
 	std::string path = "ƒAƒNƒVƒ‡ƒ“/" + header.path;
 
-	tex.lock()->LoadWIC(&id, Texture::ChangeUnicode(path.c_str()));
+	tex.lock()->LoadWIC(&id, tex.lock()->ChangeUnicode(path.c_str()));
 
-	tex.lock()->LoadWIC(&back, Texture::ChangeUnicode("img/splatterhouse.png"));
+	tex.lock()->LoadWIC(&back, tex.lock()->ChangeUnicode("img/splatterhouse.png"));
 }
 
 // •`‰æ
@@ -178,7 +178,7 @@ void Player::Walk(void)
 		return;
 	}
 
-	if (in.lock()->InputKey(DIK_RIGHT))
+	if (in.lock()->InputKey(DIK_RIGHT) == TRUE)
 	{
 		SetMode("Walk", false);
 		pos.x += 1.0f;
@@ -188,7 +188,8 @@ void Player::Walk(void)
 		SetMode("Walk", true);
 		pos.x -= 1.0f;
 	}
-	else if (in.lock()->InputKey(DIK_RETURN))
+	else if (in.lock()->Trigger
+	(DIK_RETURN))
 	{
 		SetMode("Punch", reverse);
 	}

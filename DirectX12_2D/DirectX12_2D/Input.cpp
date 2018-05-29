@@ -1,5 +1,7 @@
 #include "Input.h"
+#include "Window.h"
 #include "KeyTbl.h"
+#include "Typedef.h"
 #include <tchar.h>
 
 #pragma comment(lib, "d3d12.lib")
@@ -8,20 +10,17 @@
 // コンストラクタ
 Input::Input(std::weak_ptr<Window>winAdr) : win(winAdr)
 {
-	//参照結果の初期化
+	//参照結果
 	result = S_OK;
 
-	//インプットの初期化
-	input = nullptr;
-
-	//インプットデバイスの初期化
-	dev = nullptr;
+	// キーデータ
+	key = {};
 
 	//キー情報配列の初期化
-	for (UINT i = 0; i < 256; i++)
-	{
-		key[i] = 0;
-	}
+	memset(&keys, 0, sizeof(keys));
+
+	//前のキー情報配列の初期化
+	memset(&olds, 0, sizeof(olds));
 
 
 	//エラーを出力に表示させる
@@ -35,37 +34,26 @@ Input::Input(std::weak_ptr<Window>winAdr) : win(winAdr)
 	debug = nullptr;
 #endif
 
+
+	//関数呼び出し
 	result = SetInputDevice();
 }
 
 // デストラクタ
 Input::~Input()
 {
-	//インプットデバイス
-	if (dev != nullptr)
-	{
-		//キーボードへのアクセス権利の開放
-		dev->Unacquire();
-
-		dev->Release();
-	}
-
-	//インプット
-	if (input != nullptr)
-	{
-		input->Release();
-	}
+	RELEASE(key.input);
+	RELEASE(key.dev);
 }
 
 // インプットの生成
 HRESULT Input::CreateInput(void)
 {
 	//インプット生成
-	result = DirectInput8Create(GetModuleHandle(0), VERSION, IID_IDirectInput8, (void**)(&input), NULL);
+	result = DirectInput8Create(GetModuleHandle(0), VERSION, IID_IDirectInput8, (void**)(&key.input), NULL);
 	if (FAILED(result))
 	{
-		OutputDebugString(_T("インプットの生成：失敗\n"));
-
+		OutputDebugString(_T("\nインプットの生成：失敗\n"));
 		return result;
 	}
 
@@ -82,11 +70,10 @@ HRESULT Input::CreateInputDevice(void)
 	}
 
 	//インプットデバイス生成
-	result = input->CreateDevice(GUID_SysKeyboard, &dev, NULL);
+	result = key.input->CreateDevice(GUID_SysKeyboard, &key.dev, NULL);
 	if (FAILED(result))
 	{
-		OutputDebugString(_T("インプットデバイスの生成：失敗\n"));
-
+		OutputDebugString(_T("\nインプットデバイスの生成：失敗\n"));
 		return result;
 	}
 
@@ -103,24 +90,27 @@ HRESULT Input::SetInputDevice(void)
 	}
 
 	//キーボードにセット
-	result = dev->SetDataFormat(&keybord);
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("インプットデバイスのキーボードセット：失敗\n"));
-		return result;
+		result = key.dev->SetDataFormat(&keybord);
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nインプットデバイスのキーボードセット：失敗\n"));
+			return result;
+		}
 	}
 
 	//協調レベルをセット
-	result = dev->SetCooperativeLevel(win.lock()->GetWindowHandle(), DISCL_NONEXCLUSIVE | DISCL_BACKGROUND);
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("協調レベルのセット：失敗\n"));
-
-		return result;
+		result = key.dev->SetCooperativeLevel(win.lock()->GetWindowHandle(), DISCL_NONEXCLUSIVE | DISCL_BACKGROUND);
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\n協調レベルのセット：失敗\n"));
+			return result;
+		}
 	}
 
 	//入力デバイスへのアクセス権利を取得
-	dev->Acquire();
+	key.dev->Acquire();
 
 	return result;
 }
@@ -132,12 +122,33 @@ BOOL Input::InputKey(UINT data)
 	BOOL flag = FALSE;
 
 	//キー情報を取得
-	dev->GetDeviceState(sizeof(key), &key);
+	key.dev->GetDeviceState(sizeof(keys), &keys);
 
-	if (key[data] & 0x80)
+	if (keys[data] & 0x80)
 	{
 		flag = TRUE;
 	}
+
+	olds[data] = keys[data];
+
+	return flag;
+}
+
+// トリガー入力
+BOOL Input::Trigger(UINT data)
+{
+	//ダミー宣言
+	BOOL flag = FALSE;
+
+	//キー情報を取得
+	key.dev->GetDeviceState(sizeof(keys), &keys);
+
+	if ((keys[data] & 0x80) && !(olds[data] & 0x80))
+	{
+		flag = TRUE;
+	}
+
+	olds[data] = keys[data];
 
 	return flag;
 }

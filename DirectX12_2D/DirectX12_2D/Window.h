@@ -12,13 +12,14 @@ public:
 	// ウィンドウプロシージャ
 	static LRESULT WindowProcedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
-	// ウィンドウの生成
-	void CreateWnd(void);
-
 	// ウィンドウハンドルの取得
 	HWND GetWindowHandle(void);
 
 private:
+	// ウィンドウの生成
+	void CreateWnd(void);
+
+
 	// ウィンドウハンドル
 	HWND windowHandle;
 

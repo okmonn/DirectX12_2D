@@ -1,4 +1,5 @@
 #include "Device.h"
+#include "Window.h"
 #include "d3dx12.h"
 #include <d3dcompiler.h>
 #include <tchar.h>
@@ -83,6 +84,7 @@ Device::Device(std::weak_ptr<Window> win) : win(win)
 #endif
 
 
+	//関数呼び出し
 	Init();
 }
 
@@ -92,28 +94,28 @@ Device::~Device()
 	//定数バッファのアンマップ
 	con.resource->Unmap(0, nullptr);
 
-	Release(con.resource);
-	Release(con.heap);
-	Release(pipe.vertex);
-	Release(pipe.pixel);
-	Release(pipe.pipeline);
-	Release(sig.signature);
-	Release(sig.error);
-	Release(sig.rootSignature);
-	Release(fen.fence);
-	Release(depth.resource);
-	Release(depth.heap);
+	RELEASE(con.resource);
+	RELEASE(con.heap);
+	RELEASE(pipe.vertex);
+	RELEASE(pipe.pixel);
+	RELEASE(pipe.pipeline);
+	RELEASE(sig.signature);
+	RELEASE(sig.error);
+	RELEASE(sig.rootSignature);
+	RELEASE(fen.fence);
+	RELEASE(depth.resource);
+	RELEASE(depth.heap);
 	for (UINT i = 0; i < render.resource.size(); ++i)
 	{
-		Release(render.resource[i]);
+		RELEASE(render.resource[i]);
 	}
-	Release(render.heap);
-	Release(swap.factory);
-	Release(swap.swapChain);
-	Release(com.queue);
-	Release(com.list);
-	Release(com.allocator);
-	Release(dev);
+	RELEASE(render.heap);
+	RELEASE(swap.factory);
+	RELEASE(swap.swapChain);
+	RELEASE(com.queue);
+	RELEASE(com.list);
+	RELEASE(com.allocator);
+	RELEASE(dev);
 }
 
 // 初期化
@@ -127,7 +129,7 @@ void Device::Init(void)
 
 	CreateRenderTarget();
 
-	CreateDepthStencil();
+	CreateDepthView();
 
 	CreateFence();
 
@@ -137,7 +139,7 @@ void Device::Init(void)
 
 	CreatePipeline();
 
-	CreateConstant();
+	CreateConstantView();
 
 	SetViewPort();
 
@@ -147,85 +149,105 @@ void Device::Init(void)
 // 描画セット
 void Device::Set(void)
 {
-	/*if (in.lock()->InputKey(DIK_RIGHT) == TRUE)
-	{
-	//回転
-	angle++;
-	//行列更新
-	wvp.world = DirectX::XMMatrixRotationY(RAD(angle));
-	}
-	else if (in.lock()->InputKey(DIK_LEFT) == TRUE)
-	{
-	//回転
-	angle--;
-	//行列更新
-	wvp.world = DirectX::XMMatrixRotationY(RAD(angle));
-	}*/
-
 	//行列データ更新
 	memcpy(con.data, &wvp, sizeof(WVP));
 
-	//コマンドアロケータのリセット
-	com.allocator->Reset();
-	//リストのリセット
-	com.list->Reset(com.allocator, pipe.pipeline);
+	//リセット
+	{
+		//コマンドアロケータのリセット
+		com.allocator->Reset();
+		//リストのリセット
+		com.list->Reset(com.allocator, pipe.pipeline);
+	}
 
 	//ルートシグネチャのセット
-	com.list->SetGraphicsRootSignature(sig.rootSignature);
+	{
+		com.list->SetGraphicsRootSignature(sig.rootSignature);
+	}
 
 	//パイプラインのセット
-	com.list->SetPipelineState(pipe.pipeline);
+	{
+		com.list->SetPipelineState(pipe.pipeline);
+	}
 
-	//定数バッファヒープの先頭ハンドルを取得
-	D3D12_GPU_DESCRIPTOR_HANDLE c_handle = con.heap->GetGPUDescriptorHandleForHeapStart();
+	//定数バッファ
+	{
+		//定数バッファヒープの先頭ハンドルを取得
+		D3D12_GPU_DESCRIPTOR_HANDLE c_handle = con.heap->GetGPUDescriptorHandleForHeapStart();
 
-	//定数バッファヒープのセット
-	com.list->SetDescriptorHeaps(1, &con.heap);
+		//定数バッファヒープのセット
+		com.list->SetDescriptorHeaps(1, &con.heap);
 
-	//定数バッファディスクラプターテーブルのセット
-	com.list->SetGraphicsRootDescriptorTable(0, c_handle);
+		//定数バッファディスクラプターテーブルのセット
+		com.list->SetGraphicsRootDescriptorTable(0, c_handle);
+	}
 
 	//ビューのセット
-	com.list->RSSetViewports(1, &viewPort);
+	{
+		com.list->RSSetViewports(1, &viewPort);
+	}
 
 	//シザーのセット
-	com.list->RSSetScissorRects(1, &scissor);
+	{
+		com.list->RSSetScissorRects(1, &scissor);
+	}
 
 	//Present ---> RenderTarget
-	Barrier(D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	{
+		Barrier(D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-	//頂点ヒープの先頭ハンドルの取得
-	CD3DX12_CPU_DESCRIPTOR_HANDLE r_handle(render.heap->GetCPUDescriptorHandleForHeapStart(), swap.swapChain->GetCurrentBackBufferIndex(), render.size);
+	}
 
-	//レンダーターゲットのセット
-	com.list->OMSetRenderTargets(1, &r_handle, false, &depth.heap->GetCPUDescriptorHandleForHeapStart());
+	//レンダーターゲット
+	{
+		//頂点ヒープの先頭ハンドルの取得
+		CD3DX12_CPU_DESCRIPTOR_HANDLE r_handle(render.heap->GetCPUDescriptorHandleForHeapStart(), swap.swapChain->GetCurrentBackBufferIndex(), render.size);
 
-	//レンダーターゲットのクリア
-	com.list->ClearRenderTargetView(r_handle, clearColor, 0, nullptr);
+		//レンダーターゲットのセット
+		com.list->OMSetRenderTargets(1, &r_handle, false, &depth.heap->GetCPUDescriptorHandleForHeapStart());
 
-	//深度ステンシルヒープの先頭ハンドルの取得
-	D3D12_CPU_DESCRIPTOR_HANDLE d_handle = depth.heap->GetCPUDescriptorHandleForHeapStart();
+		//レンダーターゲットのクリア
+		com.list->ClearRenderTargetView(r_handle, clearColor, 0, nullptr);
 
-	//深度ステンシルビューのクリア
-	com.list->ClearDepthStencilView(d_handle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	}
+
+	//深度ステンシル
+	{
+		//深度ステンシルヒープの先頭ハンドルの取得
+		D3D12_CPU_DESCRIPTOR_HANDLE d_handle = depth.heap->GetCPUDescriptorHandleForHeapStart();
+
+		//深度ステンシルビューのクリア
+		com.list->ClearDepthStencilView(d_handle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
+	}
 }
 
 // 実行
 void Device::Do(void)
 {
 	// RenderTarget ---> Present
-	Barrier(D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+	{
+		Barrier(D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+
+	}
 
 	//コマンドリストの記録終了
-	com.list->Close();
+	{
+		com.list->Close();
+	}
 
-	//リストの配列
-	ID3D12CommandList *commandList[] = { com.list };
-	//配列でない場合：queue->ExecuteCommandLists(1, (ID3D12CommandList*const*)&list);
-	com.queue->ExecuteCommandLists(_countof(commandList), commandList);
+	//コマンドリストの実行
+	{
+		//リストの配列
+		ID3D12CommandList *commandList[] = { com.list };
+		//配列でない場合：queue->ExecuteCommandLists(1, (ID3D12CommandList*const*)&list);
+		com.queue->ExecuteCommandLists(_countof(commandList), commandList);
 
+	}
 	//裏、表画面を反転
-	swap.swapChain->Present(1, 0);
+	{
+		swap.swapChain->Present(1, 0);
+	}
 
 	Wait();
 }
@@ -247,13 +269,13 @@ void Device::SetWorldViewProjection(void)
 {
 	//ダミー宣言
 	FLOAT pos = 0.0f;
-	DirectX::XMMATRIX view = DirectX::XMMatrixIdentity();
+	DirectX::XMMATRIX view   = DirectX::XMMatrixIdentity();
 	//カメラの位置
-	DirectX::XMVECTOR eye = { 0, pos,  -1 };
+	DirectX::XMVECTOR eye    = { 0, pos,  -1 };
 	//カメラの焦点
 	DirectX::XMVECTOR target = { 0, pos,   0 };
 	//カメラの上方向
-	DirectX::XMVECTOR upper = { 0, 1,     0 };
+	DirectX::XMVECTOR upper  = { 0, 1,     0 };
 
 	view = DirectX::XMMatrixLookAtLH(eye, target, upper);
 
@@ -276,7 +298,6 @@ HRESULT Device::CreateDevice(void)
 		if (result == S_OK)
 		{
 			level = i;
-
 			break;
 		}
 	}
@@ -287,44 +308,51 @@ HRESULT Device::CreateDevice(void)
 // コマンド周りの生成
 HRESULT Device::CreateCommand(void)
 {
-	if (CreateDevice() != S_OK)
+	result = CreateDevice();
+	if (FAILED(result))
 	{
 		OutputDebugString(_T("\nデバイスの生成：失敗\n"));
-		return S_FALSE;
+		return result;
 	}
 
 	//コマンドアロケータの生成
-	result = dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&com.allocator));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nコマンドアロケータの生成：失敗\n"));
-		return result;
+		result = dev->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&com.allocator));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nコマンドアロケータの生成：失敗\n"));
+			return result;
+		}
 	}
 
 	//コマンドリストの生成
-	result = dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, com.allocator, nullptr, IID_PPV_ARGS(&com.list));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nコマンドリストの生成：失敗\n"));
-		return result;
+		result = dev->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT, com.allocator, nullptr, IID_PPV_ARGS(&com.list));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nコマンドリストの生成：失敗\n"));
+			return result;
+		}
+
+		//いったん閉じる
+		com.list->Close();
 	}
 
-	//いったん閉じる
-	com.list->Close();
-
-	//コマンドキュー設定用構造体
-	D3D12_COMMAND_QUEUE_DESC desc = {};
-	desc.Flags		= D3D12_COMMAND_QUEUE_FLAGS::D3D12_COMMAND_QUEUE_FLAG_NONE;
-	desc.NodeMask	= 0;
-	desc.Priority	= D3D12_COMMAND_QUEUE_PRIORITY::D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-	desc.Type		= D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT;
-
 	//コマンドキューの生成
-	result = dev->CreateCommandQueue(&desc, IID_PPV_ARGS(&com.queue));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nコマンドキューの生成：失敗"));
-		return result;
+		//コマンドキュー設定用構造体
+		D3D12_COMMAND_QUEUE_DESC desc = {};
+		desc.Flags		= D3D12_COMMAND_QUEUE_FLAGS::D3D12_COMMAND_QUEUE_FLAG_NONE;
+		desc.NodeMask	= 0;
+		desc.Priority	= D3D12_COMMAND_QUEUE_PRIORITY::D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+		desc.Type		= D3D12_COMMAND_LIST_TYPE::D3D12_COMMAND_LIST_TYPE_DIRECT;
+
+		result = dev->CreateCommandQueue(&desc, IID_PPV_ARGS(&com.queue));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nコマンドキューの生成：失敗"));
+			return result;
+		}
 	}
 
 	return result;
@@ -341,15 +369,15 @@ HRESULT Device::CreateFactory(void)
 // スワップチェインの生成
 HRESULT Device::CreateSwapChain(void)
 {
-	if (CreateFactory() != S_OK)
+	result = CreateFactory();
+	if (FAILED(result))
 	{
 		OutputDebugString(_T("\nファクトリーの生成：失敗\n"));
-		return S_FALSE;
+		return result;
 	}
 
 	//スワップチェイン設定用構造体
-	DXGI_SWAP_CHAIN_DESC1 desc;
-	SecureZeroMemory(&desc, sizeof(desc));
+	DXGI_SWAP_CHAIN_DESC1 desc = {};
 	desc.AlphaMode		= DXGI_ALPHA_MODE::DXGI_ALPHA_MODE_UNSPECIFIED;
 	desc.BufferCount	= 2;
 	desc.BufferUsage	= DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -403,10 +431,10 @@ HRESULT Device::CreateRenderHeap(void)
 // レンダーターゲットの生成
 HRESULT Device::CreateRenderTarget(void)
 {
-	if (CreateRenderHeap() != S_OK)
+	result = CreateRenderHeap();
+	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nレンダーターゲット用ヒープの生成：失敗\n"));
-		return S_FALSE;
+		return result;
 	}
 
 	//レンダーターゲット設定用構造体
@@ -468,10 +496,10 @@ HRESULT Device::CreateDepthHeap(void)
 // 深度ステンシルの生成
 HRESULT Device::CreateDepthStencil(void)
 {
-	if (CreateDepthHeap() != S_OK)
+	result = CreateDepthHeap();
+	if (FAILED(result))
 	{
-		OutputDebugString(_T("\n深度ステンシル用ヒープの生成：失敗\n"));
-		return S_FALSE;
+		return result;
 	}
 
 	//ヒーププロパティ設定用構造体の設定
@@ -483,18 +511,18 @@ HRESULT Device::CreateDepthStencil(void)
 	prop.VisibleNodeMask		= 1;
 
 	//リソース設定用構造体の設定
-	D3D12_RESOURCE_DESC rDesc = {};
-	rDesc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	rDesc.Alignment				= 0;
-	rDesc.Width					= WINDOW_X;
-	rDesc.Height				= WINDOW_Y;
-	rDesc.DepthOrArraySize		= 1;
-	rDesc.MipLevels				= 0;
-	rDesc.Format				= DXGI_FORMAT::DXGI_FORMAT_D32_FLOAT;
-	rDesc.SampleDesc.Count		= 1;
-	rDesc.SampleDesc.Quality	= 0;
-	rDesc.Flags					= D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-	rDesc.Layout				= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	D3D12_RESOURCE_DESC desc = {};
+	desc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	desc.Alignment				= 0;
+	desc.Width					= WINDOW_X;
+	desc.Height					= WINDOW_Y;
+	desc.DepthOrArraySize		= 1;
+	desc.MipLevels				= 0;
+	desc.Format					= DXGI_FORMAT::DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count		= 1;
+	desc.SampleDesc.Quality		= 0;
+	desc.Flags					= D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+	desc.Layout					= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_UNKNOWN;
 
 	//クリア値設定用構造体の設定
 	D3D12_CLEAR_VALUE clear = {};
@@ -503,18 +531,30 @@ HRESULT Device::CreateDepthStencil(void)
 	clear.DepthStencil.Stencil	= 0;
 
 	//深度ステンシル用リソース生成
-	result = dev->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &rDesc, D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear, IID_PPV_ARGS(&depth.resource));
+	result = dev->CreateCommittedResource(&prop, D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_DEPTH_WRITE, &clear, IID_PPV_ARGS(&depth.resource));
 	if (FAILED(result))
 	{
 		OutputDebugString(_T("\n深度ステンシル用リソースの生成：失敗\n"));
 		return result;
 	}
 
+	return result;
+}
+
+// 深度ステンシルビューの生成
+HRESULT Device::CreateDepthView(void)
+{
+	result = CreateDepthStencil();
+	if (FAILED(result))
+	{
+		return result;
+	}
+
 	//深度ステンシルビュー設定用構造体の設定
 	D3D12_DEPTH_STENCIL_VIEW_DESC desc = {};
-	desc.Format					= DXGI_FORMAT::DXGI_FORMAT_D32_FLOAT;
-	desc.ViewDimension			= D3D12_DSV_DIMENSION::D3D12_DSV_DIMENSION_TEXTURE2D;
-	desc.Flags					= D3D12_DSV_FLAGS::D3D12_DSV_FLAG_NONE;
+	desc.Format			= DXGI_FORMAT::DXGI_FORMAT_D32_FLOAT;
+	desc.ViewDimension	= D3D12_DSV_DIMENSION::D3D12_DSV_DIMENSION_TEXTURE2D;
+	desc.Flags			= D3D12_DSV_FLAGS::D3D12_DSV_FLAG_NONE;
 
 	//深度ステンシルビュー生成
 	dev->CreateDepthStencilView(depth.resource, &desc, depth.heap->GetCPUDescriptorHandleForHeapStart());
@@ -532,22 +572,26 @@ HRESULT Device::CreateFence(void)
 	}
 
 	//フェンス生成
-	result = dev->CreateFence(fen.fenceCnt, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fen.fence));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nフェンスの生成：失敗\n"));
-		return result;
+		result = dev->CreateFence(fen.fenceCnt, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fen.fence));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nフェンスの生成：失敗\n"));
+			return result;
+		}
+
+		//フェンス値更新
+		fen.fenceCnt = 1;
 	}
 
-	//フェンス値更新
-	fen.fenceCnt = 1;
-
 	//フェンスイベント生成
-	fen.fenceEvent = CreateEventEx(nullptr, FALSE, FALSE, EVENT_ALL_ACCESS);
-	if (fen.fenceEvent == nullptr)
 	{
-		OutputDebugString(_T("\nフェンスイベントの生成：失敗\n"));
-		return S_FALSE;
+		fen.fenceEvent = CreateEventEx(nullptr, FALSE, FALSE, EVENT_ALL_ACCESS);
+		if (fen.fenceEvent == nullptr)
+		{
+			OutputDebugString(_T("\nフェンスイベントの生成：失敗\n"));
+			return S_FALSE;
+		}
 	}
 
 	return result;
@@ -556,11 +600,11 @@ HRESULT Device::CreateFence(void)
 // シグネチャのシリアライズ
 HRESULT Device::Serialize(void)
 {
-	// ディスクリプタレンジの設定.
+	//ディスクリプタレンジの設定
 	D3D12_DESCRIPTOR_RANGE range[2];
 	SecureZeroMemory(&range, sizeof(range));
 
-	//ルートパラメータの設定.
+	//ルートパラメータの設定
 	D3D12_ROOT_PARAMETER param[2];
 	SecureZeroMemory(&param, sizeof(param));
 
@@ -588,6 +632,7 @@ HRESULT Device::Serialize(void)
 	param[1].DescriptorTable.NumDescriptorRanges	= 1;
 	param[1].DescriptorTable.pDescriptorRanges		= &range[1];
 
+
 	//静的サンプラーの設定
 	D3D12_STATIC_SAMPLER_DESC sampler = {};
 	sampler.Filter									= D3D12_FILTER::D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
@@ -613,7 +658,14 @@ HRESULT Device::Serialize(void)
 	desc.Flags										= D3D12_ROOT_SIGNATURE_FLAGS::D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	//ルートシグネチャのシリアライズ化
-	result = D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, &sig.signature, &sig.error);
+	{
+		result = D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION::D3D_ROOT_SIGNATURE_VERSION_1, &sig.signature, &sig.error);
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nシリアライズ化：失敗\n"));
+			return result;
+		}
+	}
 
 	return result;
 }
@@ -621,10 +673,10 @@ HRESULT Device::Serialize(void)
 // ルートシグネチャの生成
 HRESULT Device::CreateRootSigunature(void)
 {
-	if (Serialize() != S_OK)
+	result = Serialize();
+	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nシリアライズ化：失敗\n"));
-		return S_FALSE;
+		return result;
 	}
 
 	//ルートシグネチャ生成
@@ -642,19 +694,23 @@ HRESULT Device::CreateRootSigunature(void)
 HRESULT Device::ShaderCompile(LPCWSTR fileName)
 {
 	//頂点シェーダのコンパイル
-	result = D3DCompileFromFile(fileName, nullptr, nullptr, "TextureVS", "vs_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pipe.vertex, &sig.error);
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\n頂点シェーダコンパイル：失敗\n"));
-		return result;
+		result = D3DCompileFromFile(fileName, nullptr, nullptr, "BasicVS", "vs_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pipe.vertex, &sig.error);
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\n頂点シェーダコンパイル：失敗\n"));
+			return result;
+		}
 	}
 
 	//ピクセルシェーダのコンパイル
-	result = D3DCompileFromFile(fileName, nullptr, nullptr, "TexturePS", "ps_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pipe.pixel, &sig.error);
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nピクセルシェーダコンパイル：失敗\n"));
-		return result;
+		result = D3DCompileFromFile(fileName, nullptr, nullptr, "BasicPS", "ps_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION, 0, &pipe.pixel, &sig.error);
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nピクセルシェーダコンパイル：失敗\n"));
+			return result;
+		}
 	}
 
 	return result;
@@ -716,8 +772,8 @@ HRESULT Device::CreatePipeline(void)
 	desc.RasterizerState					= rasterizer;
 	desc.BlendState							= descBS;
 	desc.DepthStencilState.DepthEnable		= true;
-	desc.DepthStencilState.DepthWriteMask	= D3D12_DEPTH_WRITE_MASK_ALL;
-	desc.DepthStencilState.DepthFunc		= D3D12_COMPARISON_FUNC_LESS;
+	desc.DepthStencilState.DepthWriteMask	= D3D12_DEPTH_WRITE_MASK::D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc		= D3D12_COMPARISON_FUNC::D3D12_COMPARISON_FUNC_LESS;
 	desc.DepthStencilState.StencilEnable	= FALSE;
 	desc.SampleMask							= UINT_MAX;
 	desc.NumRenderTargets					= 1;
@@ -726,11 +782,13 @@ HRESULT Device::CreatePipeline(void)
 	desc.SampleDesc.Count					= 1;
 
 	//パイプライン生成
-	result = dev->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipe.pipeline));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nパイプラインの生成：失敗\n"));
-		return result;
+		result = dev->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(&pipe.pipeline));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nパイプラインの生成：失敗\n"));
+			return result;
+		}
 	}
 
 	return result;
@@ -746,15 +804,17 @@ HRESULT Device::CreateConstantHeap(void)
 	desc.Type				= D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 	//ヒープ生成
-	result = dev->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&con.heap));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\n定数バッファ用ヒープの生成：失敗\n"));
-		return result;
-	}
+		result = dev->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&con.heap));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\n定数バッファ用ヒープの生成：失敗\n"));
+			return result;
+		}
 
-	//ヒープサイズ設定
-	con.size = dev->GetDescriptorHandleIncrementSize(desc.Type);
+		//ヒープサイズ設定
+		con.size = dev->GetDescriptorHandleIncrementSize(desc.Type);
+	}
 
 	return result;
 }
@@ -762,10 +822,10 @@ HRESULT Device::CreateConstantHeap(void)
 // 定数バッファの生成
 HRESULT Device::CreateConstant(void)
 {
-	if (CreateConstantHeap() != S_OK)
+	result = CreateConstantHeap();
+	if (FAILED(result))
 	{
-		OutputDebugString(_T("\n定数バッファ用ヒープの生成：失敗\n"));
-		return S_FALSE;
+		return result;
 	}
 
 	//ヒープ設定用構造体の設定
@@ -777,46 +837,64 @@ HRESULT Device::CreateConstant(void)
 	prop.VisibleNodeMask		= 1;
 
 	//リソース設定用構造体の設定
-	D3D12_RESOURCE_DESC rDesc = {};
-	rDesc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
-	rDesc.Width					= ((sizeof(WVP) + 0xff) &~0xff);
-	rDesc.Height				= 1;
-	rDesc.DepthOrArraySize		= 1;
-	rDesc.MipLevels				= 1;
-	rDesc.Format				= DXGI_FORMAT::DXGI_FORMAT_UNKNOWN;
-	rDesc.SampleDesc.Count		= 1;
-	rDesc.Flags					= D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE;
-	rDesc.Layout				= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+	D3D12_RESOURCE_DESC desc = {};
+	desc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_BUFFER;
+	desc.Width					= ((sizeof(WVP) + 0xff) &~0xff);
+	desc.Height					= 1;
+	desc.DepthOrArraySize		= 1;
+	desc.MipLevels				= 1;
+	desc.Format					= DXGI_FORMAT::DXGI_FORMAT_UNKNOWN;
+	desc.SampleDesc.Count		= 1;
+	desc.Flags					= D3D12_RESOURCE_FLAGS::D3D12_RESOURCE_FLAG_NONE;
+	desc.Layout					= D3D12_TEXTURE_LAYOUT::D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
 	//リソース生成
-	result = dev->CreateCommittedResource(&prop, D3D12_HEAP_FLAG_NONE, &rDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&con.resource));
+	{
+		result = dev->CreateCommittedResource(&prop, D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&con.resource));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\n定数バッファ用リソースの生成：失敗\n"));
+			return result;
+		}
+	}
+
+	return result;
+}
+
+// 定数バッファビューの生成
+HRESULT Device::CreateConstantView(void)
+{
+	result = CreateConstant();
 	if (FAILED(result))
 	{
-		OutputDebugString(_T("\n定数バッファ用リソースの生成：失敗\n"));
 		return result;
 	}
 
 	//定数バッファビュー設定用構造体の設定
 	D3D12_CONSTANT_BUFFER_VIEW_DESC desc = {};
-	desc.BufferLocation			= con.resource->GetGPUVirtualAddress();
-	desc.SizeInBytes			= (sizeof(WVP) + 0xff) &~0xff;
+	desc.BufferLocation		= con.resource->GetGPUVirtualAddress();
+	desc.SizeInBytes		= (sizeof(WVP) + 0xff) &~0xff;
 
-	//定数バッファビュー生成
-	dev->CreateConstantBufferView(&desc, con.heap->GetCPUDescriptorHandleForHeapStart());
+	{
+		//定数バッファビュー生成
+		dev->CreateConstantBufferView(&desc, con.heap->GetCPUDescriptorHandleForHeapStart());
+	}
 
 	//送信範囲
 	D3D12_RANGE range = { 0, 0 };
 
 	//マッピング
-	result = con.resource->Map(0, &range, (void**)(&con.data));
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\n定数バッファ用リソースのマッピング：失敗\n"));
-		return result;
-	}
+		result = con.resource->Map(0, &range, (void**)(&con.data));
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\n定数バッファ用リソースのマッピング：失敗\n"));
+			return result;
+		}
 
-	//コピー
-	memcpy(con.data, &wvp, sizeof(DirectX::XMMATRIX));
+		//コピー
+		memcpy(con.data, &wvp, sizeof(DirectX::XMMATRIX));
+	}
 
 	return result;
 }
@@ -844,15 +922,17 @@ void Device::SetScissor(void)
 // バリアの更新
 void Device::Barrier(D3D12_RESOURCE_STATES befor, D3D12_RESOURCE_STATES affter)
 {
-	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrier.Flags					= D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Type					= D3D12_RESOURCE_BARRIER_TYPE::D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Flags					= D3D12_RESOURCE_BARRIER_FLAGS::D3D12_RESOURCE_BARRIER_FLAG_NONE;
 	barrier.Transition.pResource	= render.resource[swap.swapChain->GetCurrentBackBufferIndex()];
 	barrier.Transition.StateBefore	= befor;
 	barrier.Transition.StateAfter	= affter;
-	barrier.Transition.Subresource	= D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Transition.Subresource	= D3D12_RESOURCE_BARRIER_FLAGS::D3D12_RESOURCE_BARRIER_FLAG_NONE;
 
 	//バリア設置
-	com.list->ResourceBarrier(1, &barrier);
+	{
+		com.list->ResourceBarrier(1, &barrier);
+	}
 }
 
 // 待機処理
@@ -862,21 +942,18 @@ void Device::Wait(void)
 	fen.fenceCnt++;
 
 	//フェンス値を変更
-	result = com.queue->Signal(fen.fence, fen.fenceCnt);
-	if (FAILED(result))
 	{
-		OutputDebugString(_T("\nフェンス値の更新：失敗\n"));
-		return;
+		result = com.queue->Signal(fen.fence, fen.fenceCnt);
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\nフェンス値の更新：失敗\n"));
+			return;
+		}
 	}
 
 	//完了を待機(ポーリング)
 	while (fen.fence->GetCompletedValue() != fen.fenceCnt)
 	{
-		/*auto a = fence.fenceCnt;
-		std::stringstream s;
-		s << a;
-		OutputDebugStringA(s.str().c_str());*/
-
 		//フェンスイベントのセット
 		result = fen.fence->SetEventOnCompletion(fen.fenceCnt, fen.fenceEvent);
 		if (FAILED(result))
@@ -887,113 +964,5 @@ void Device::Wait(void)
 
 		//フェンスイベントの待機
 		WaitForSingleObject(fen.fenceEvent, INFINITE);
-	}
-}
-
-// 解放処理
-void Device::Release(ID3D12Resource * resource)
-{
-	if (resource != nullptr)
-	{
-		resource->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(ID3D12DescriptorHeap * heap)
-{
-	if (heap != nullptr)
-	{
-		heap->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(ID3DBlob * blob)
-{
-	if (blob != nullptr)
-	{
-		blob->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(ID3D12PipelineState * pipe)
-{
-	if (pipe != nullptr)
-	{
-		pipe->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(ID3D12RootSignature * signature)
-{
-	if (signature != nullptr)
-	{
-		signature->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(ID3D12Fence * fence)
-{
-	if (fence != nullptr)
-	{
-		fence->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(IDXGIFactory4 * factory)
-{
-	if (factory != nullptr)
-	{
-		factory->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(IDXGISwapChain3 * swap)
-{
-	if (swap != nullptr)
-	{
-		swap->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(ID3D12CommandQueue * queue)
-{
-	if (queue != nullptr)
-	{
-		queue->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(ID3D12GraphicsCommandList * list)
-{
-	if (list != nullptr)
-	{
-		list->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(ID3D12CommandAllocator * allocator)
-{
-	if (allocator != nullptr)
-	{
-		allocator->Release();
-	}
-}
-
-// 解放処理
-void Device::Release(ID3D12Device * dev)
-{
-	if (dev != nullptr)
-	{
-		dev->Release();
 	}
 }

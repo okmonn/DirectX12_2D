@@ -5,16 +5,17 @@
 // コンストラクタ
 Window::Window()
 {
-	//ウィンドウハンドルの初期化
+	//ウィンドウハンドル
 	windowHandle = nullptr;
 
-	//ウィンドウ設定用構造体の初期化
-	SecureZeroMemory(&window, sizeof(window));
+	//ウィンドウ設定用構造体
+	window = {};
 
-	//ウィンドウサイズ設定用構造体の初期化
-	SecureZeroMemory(&rect, sizeof(rect));
+	//ウィンドウサイズ設定用構造体
+	rect = {};
 
 
+	//関数呼び出し
 	CreateWnd();
 }
 
@@ -35,6 +36,7 @@ LRESULT Window::WindowProcedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 		PostQuitMessage(0);
 		return 0;
 	}
+
 	//規定の処理を行う
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
@@ -42,28 +44,32 @@ LRESULT Window::WindowProcedure(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
 // ウィンドウの生成
 void Window::CreateWnd(void)
 {
-	//ウィンドウ設定用構造体の要素の設定
-	window.cbClsExtra = 0;
-	window.cbSize = sizeof(WNDCLASSEX);
-	window.cbWndExtra = 0;
-	window.hbrBackground = CreateSolidBrush(0x000000);
-	window.hCursor = LoadCursor(NULL, IDC_ARROW);
-	window.hIcon = LoadCursor(NULL, IDI_APPLICATION);
-	window.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
-	window.hInstance = GetModuleHandle(0);
-	window.lpfnWndProc = (WNDPROC)WindowProcedure;
-	window.lpszClassName = _T("DirectX12");
-	window.lpszMenuName = _T("DirectX12");
-	window.style = CS_HREDRAW;
+	//ウィンドウ設定用構造体の設定
+	{
+		window.cbClsExtra		= 0;
+		window.cbSize			= sizeof(WNDCLASSEX);
+		window.cbWndExtra		= 0;
+		window.hbrBackground	= CreateSolidBrush(0x000000);
+		window.hCursor			= LoadCursor(NULL, IDC_ARROW);
+		window.hIcon			= LoadCursor(NULL, IDI_APPLICATION);
+		window.hIconSm			= LoadIcon(NULL, IDI_APPLICATION);
+		window.hInstance		= GetModuleHandle(0);
+		window.lpfnWndProc		= (WNDPROC)WindowProcedure;
+		window.lpszClassName	= _T("DirectX12");
+		window.lpszMenuName		= _T("DirectX12");
+		window.style			= CS_HREDRAW;
+	}
 
 	//ウィンドウの登録
 	RegisterClassEx(&window);
 
-	//ウィンドウサイズ設定用構造体の要素の設定
-	rect.bottom = WINDOW_Y;
-	rect.left = 0;
-	rect.right = WINDOW_X;
-	rect.top = 0;
+	//ウィンドウサイズ設定用構造体の設定
+	{
+		rect.bottom		= WINDOW_Y;
+		rect.left		= 0;
+		rect.right		= WINDOW_X;
+		rect.top		= 0;
+	}
 
 	//サイズの補正
 	AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, false);
