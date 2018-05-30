@@ -87,13 +87,18 @@ public:
 	// 分割描画
 	void DrawRectWIC(USHORT* index, Vector2<FLOAT>pos, Vector2<FLOAT>size, Vector2<FLOAT>rect, Vector2<FLOAT>rSize, bool turn = false);
 
+	// BMPの任意の要素の画像データの消去
+	void DeleteImageBMP(USHORT* index);
+	// WICの任意の要素の画像データの消去
+	void DeleteImageWIC(USHORT* index);
+
 private:
 	// 定数バッファ用のヒープの生成	
-	HRESULT CreateConstantHeap(USHORT* index, std::string fileName);
+	HRESULT CreateConstantHeap(USHORT* index);
 	// 定数バッファの生成
-	HRESULT CreateConstant(USHORT* index, std::string fileName);
+	HRESULT CreateConstant(USHORT* index);
 	// シェーダリソースビューの生成
-	HRESULT CreateShaderResourceView(USHORT* index, std::string fileName);
+	HRESULT CreateShaderResourceView(USHORT* index);
 
 
 	// 定数バッファ用ヒープの生成
@@ -115,9 +120,6 @@ private:
 
 	// 参照結果
 	HRESULT result;
-
-	// BMPデータの起源
-	std::map<std::string, BMP>origin;
 
 	// BMPデータ
 	std::map<USHORT*, BMP>bmp;

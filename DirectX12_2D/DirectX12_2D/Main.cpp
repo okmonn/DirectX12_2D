@@ -34,8 +34,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	ShowWindow(win->GetWindowHandle(), nCmdShow);
 
 	//メッセージ用構造体
-	MSG msg;
-	SecureZeroMemory(&msg, sizeof(msg));
+	MSG msg = {};
+	USHORT i = 0;
+	USHORT o = 0;
+	s->LoadWAV(&i, "サンプル.wav");
+	s->LoadWAV(&o, "サンプル.wav");
 
 	while (msg.message != WM_QUIT)
 	{

@@ -14,9 +14,6 @@ Texture::Texture(std::weak_ptr<Device>dev) : dev(dev)
 	//参照結果
 	result = S_OK;
 
-	//起源
-	origin.clear();
-
 	//BMPデータ
 	bmp.clear();
 
@@ -42,11 +39,6 @@ Texture::~Texture()
 	for (auto itr = bmp.begin(); itr != bmp.end(); ++itr)
 	{
 		RELEASE(itr->second.vertex.resource);
-		RELEASE(itr->second.resource);
-		RELEASE(itr->second.heap);
-	}
-	for (auto itr = origin.begin(); itr != origin.end(); ++itr)
-	{
 		RELEASE(itr->second.resource);
 		RELEASE(itr->second.heap);
 	}
@@ -77,17 +69,6 @@ std::wstring Texture::ChangeUnicode(const CHAR * str)
 // 読み込み
 HRESULT Texture::LoadBMP(USHORT* index, std::string fileName)
 {
-	for (auto itr = origin.begin(); itr != origin.end(); ++itr)
-	{
-		if (itr->first == fileName)
-		{
-			bmp[index] = itr->second;
-
-			return result;
-			break;
-		}
-	}
-
 	//BMPヘッダー構造体
 	BITMAPINFOHEADER header = {};
 
@@ -116,12 +97,12 @@ HRESULT Texture::LoadBMP(USHORT* index, std::string fileName)
 	fread(&header, sizeof(header), 1, file);
 
 	//画像の幅と高さの保存
-	origin[fileName].size = { header.biWidth, header.biHeight };
+	bmp[index].size = { header.biWidth, header.biHeight };
 
 	if (header.biBitCount == 24)
 	{
 		//データサイズ分のメモリ確保(ビットの深さが24bitの場合)
-		origin[fileName].data.resize(header.biWidth * header.biHeight * 4);
+		bmp[index].data.resize(header.biWidth * header.biHeight * 4);
 
 		for (int line = header.biHeight - 1; line >= 0; --line)
 		{
@@ -129,15 +110,15 @@ HRESULT Texture::LoadBMP(USHORT* index, std::string fileName)
 			{
 				//一番左の配列番号
 				UINT address = line * header.biWidth * 4;
-				origin[fileName].data[address + count] = 0;
-				fread(&origin[fileName].data[address + count + 1], sizeof(UCHAR), 3, file);
+				bmp[index].data[address + count] = 0;
+				fread(&bmp[index].data[address + count + 1], sizeof(UCHAR), 3, file);
 			}
 		}
 	}
 	else if (header.biBitCount == 32)
 	{
 		//データサイズ分のメモリ確保(ビットの深さが32bitの場合)
-		origin[fileName].data.resize(header.biSizeImage);
+		bmp[index].data.resize(header.biSizeImage);
 
 		for (int line = header.biHeight - 1; line >= 0; --line)
 		{
@@ -145,7 +126,7 @@ HRESULT Texture::LoadBMP(USHORT* index, std::string fileName)
 			{
 				//一番左の配列番号
 				UINT address = line * header.biWidth * 4;
-				fread(&origin[fileName].data[address + count], sizeof(UCHAR), 4, file);
+				fread(&bmp[index].data[address + count], sizeof(UCHAR), 4, file);
 			}
 		}
 	}
@@ -153,10 +134,8 @@ HRESULT Texture::LoadBMP(USHORT* index, std::string fileName)
 	//ファイルを閉じる
 	fclose(file);
 
-	result = CreateShaderResourceView(index, fileName);
+	result = CreateShaderResourceView(index);
 	result = CreateVertex(index);
-
-	bmp[index] = origin[fileName];
 
 	return result;
 }
@@ -204,7 +183,7 @@ void Texture::SetDescriptorWIC(USHORT* index)
 }
 
 // 定数バッファ用のヒープの生成	
-HRESULT Texture::CreateConstantHeap(USHORT* index, std::string fileName)
+HRESULT Texture::CreateConstantHeap(USHORT* index)
 {
 	//ヒープ設定用構造体の設定
 	D3D12_DESCRIPTOR_HEAP_DESC desc = {};
@@ -214,7 +193,7 @@ HRESULT Texture::CreateConstantHeap(USHORT* index, std::string fileName)
 	desc.Type				= D3D12_DESCRIPTOR_HEAP_TYPE::D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
 	//ヒープ生成
-	result = dev.lock()->GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&origin[fileName].heap));
+	result = dev.lock()->GetDevice()->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&bmp[index].heap));
 	if (FAILED(result))
 	{
 		OutputDebugString(_T("\nテクスチャの定数バッファ用ヒープの生成：失敗\n"));
@@ -225,9 +204,9 @@ HRESULT Texture::CreateConstantHeap(USHORT* index, std::string fileName)
 }
 
 // 定数バッファの生成
-HRESULT Texture::CreateConstant(USHORT* index, std::string fileName)
+HRESULT Texture::CreateConstant(USHORT* index)
 {
-	result = CreateConstantHeap(index, fileName);
+	result = CreateConstantHeap(index);
 	if (FAILED(result))
 	{
 		return result;
@@ -244,8 +223,8 @@ HRESULT Texture::CreateConstant(USHORT* index, std::string fileName)
 	//リソース設定用構造体の設定
 	D3D12_RESOURCE_DESC desc = {};
 	desc.Dimension				= D3D12_RESOURCE_DIMENSION::D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-	desc.Width					= origin[fileName].size.width;
-	desc.Height					= origin[fileName].size.height;
+	desc.Width					= bmp[index].size.width;
+	desc.Height					= bmp[index].size.height;
 	desc.DepthOrArraySize		= 1;
 	desc.Format					= DXGI_FORMAT::DXGI_FORMAT_R8G8B8A8_UNORM;
 	desc.SampleDesc.Count		= 1;
@@ -254,7 +233,7 @@ HRESULT Texture::CreateConstant(USHORT* index, std::string fileName)
 
 	//リソース生成
 	{
-		result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&origin[fileName].resource));
+		result = dev.lock()->GetDevice()->CreateCommittedResource(&prop, D3D12_HEAP_FLAGS::D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATES::D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&bmp[index].resource));
 		if (FAILED(result))
 		{
 			OutputDebugString(_T("\nテクスチャの定数バッファ用リソースの生成：失敗\n"));
@@ -266,9 +245,9 @@ HRESULT Texture::CreateConstant(USHORT* index, std::string fileName)
 }
 
 // シェーダリソースビューの生成
-HRESULT Texture::CreateShaderResourceView(USHORT* index, std::string fileName)
+HRESULT Texture::CreateShaderResourceView(USHORT* index)
 {
-	result = CreateConstant(index, fileName);
+	result = CreateConstant(index);
 	if (FAILED(result))
 	{
 		return result;
@@ -283,10 +262,10 @@ HRESULT Texture::CreateShaderResourceView(USHORT* index, std::string fileName)
 	desc.Shader4ComponentMapping	= D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
 	//ヒープの先頭ハンドルを取得
-	D3D12_CPU_DESCRIPTOR_HANDLE handle = origin[fileName].heap->GetCPUDescriptorHandleForHeapStart();
+	D3D12_CPU_DESCRIPTOR_HANDLE handle = bmp[index].heap->GetCPUDescriptorHandleForHeapStart();
 
 	//シェーダーリソースビューの生成
-	dev.lock()->GetDevice()->CreateShaderResourceView(origin[fileName].resource, &desc, handle);
+	dev.lock()->GetDevice()->CreateShaderResourceView(bmp[index].resource, &desc, handle);
 
 	return S_OK;
 }
@@ -656,4 +635,30 @@ void Texture::DrawRectWIC(USHORT* index, Vector2<FLOAT> pos, Vector2<FLOAT> size
 
 	//描画
 	dev.lock()->GetComList()->DrawInstanced(6, 1, 0, 0);
+}
+
+// BMPの任意の要素の画像データの消去
+void Texture::DeleteImageBMP(USHORT * index)
+{
+	auto itr = bmp.find(index);
+
+	if (itr != bmp.end())
+	{
+		RELEASE(itr->second.resource);
+		RELEASE(itr->second.heap);
+		bmp.erase(itr);
+	}
+}
+
+// WICの任意の要素の画像データの消去
+void Texture::DeleteImageWIC(USHORT * index)
+{
+	auto itr = wic.find(index);
+
+	if (itr != wic.end())
+	{
+		RELEASE(itr->second.resource);
+		RELEASE(itr->second.heap);
+		wic.erase(itr);
+	}
 }

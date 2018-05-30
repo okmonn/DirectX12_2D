@@ -9,18 +9,16 @@
 #pragma comment(lib, "winmm.lib")
 
 // コンストラクタ
-Sound::Sound(std::weak_ptr<Window>win, std::weak_ptr<Input>inputAdr) : win(win)
-{
-	//インプットクラス参照
-	input = inputAdr;
-
-	//参照結果の初期化
+Sound::Sound(std::weak_ptr<Window>win) : win(win)
+{	
+	//参照結果
 	result = S_OK;
 
-	//セカンダリーバッファの初期化
-	bgm = nullptr;
+	//セカンダリーバッファ
+	origin.clear();
+	bgm.clear();
 
-	//プライマリサウンドバッファの初期化
+	//プライマリサウンドバッファ
 	buffer = nullptr;
 
 	//ダイレクトサウンド
@@ -41,20 +39,19 @@ Sound::Sound(std::weak_ptr<Window>win, std::weak_ptr<Input>inputAdr) : win(win)
 	debug = nullptr;
 #endif
 
-	result = CreateDirectSound();
-	if (result == S_OK)
-	{
-		result = CreatePrimaryBuffer();
-	}
+	//関数呼び出し
+	CreatePrimaryBuffer();
 	//result = LoadWAV(&bgm, "sample/サンプル.wav");
 }
 
 // デストラクタ
 Sound::~Sound()
 {
-	bgm->Stop();
-
-	RELEASE(bgm);
+	for (auto itr = bgm.begin(); itr != bgm.end(); ++itr)
+	{
+		itr->second->Stop();
+		RELEASE(itr->second);
+	}
 	RELEASE(buffer);
 	RELEASE(sound);
 
@@ -88,6 +85,12 @@ HRESULT Sound::CreateDirectSound(void)
 // プライマリサウンドバッファの生成
 HRESULT Sound::CreatePrimaryBuffer(void)
 {
+	result = CreateDirectSound();
+	if (FAILED(result))
+	{
+		return result;
+	}
+
 	//バッファ設定用構造体の設定
 	DSBUFFERDESC desc = {};
 	desc.dwBufferBytes		= 0;
@@ -127,13 +130,22 @@ HRESULT Sound::CreatePrimaryBuffer(void)
 }
 
 // サウンドバッファの生成
-HRESULT Sound::LoadWAV(LPDIRECTSOUNDBUFFER *wavData, const char *fileName)
+HRESULT Sound::LoadWAV(USHORT* index, std::string fileName)
 {
+	for (auto itr = origin.begin(); itr != origin.end(); ++itr)
+	{
+		if (itr->first == fileName)
+		{
+			bgm[index] = itr->second;
+			return S_OK;
+		}
+	}
+
 	//ファイルハンドルの構造体
 	HMMIO handle = {};
 
 	//wavファイルを開く
-	handle = mmioOpenA((LPSTR)fileName, NULL, MMIO_ALLOCBUF | MMIO_READ | MMIO_COMPAT);
+	handle = mmioOpenA((LPSTR)fileName.c_str(), NULL, MMIO_ALLOCBUF | MMIO_READ | MMIO_COMPAT);
 	if (handle == nullptr)
 	{
 		OutputDebugString(_T("\nファイルを開けませんでした：失敗\n"));
@@ -249,7 +261,7 @@ HRESULT Sound::LoadWAV(LPDIRECTSOUNDBUFFER *wavData, const char *fileName)
 	desc.lpwfxFormat		= header;
 
 	//バッファ生成
-	result = sound->CreateSoundBuffer(&desc, wavData, NULL);
+	result = sound->CreateSoundBuffer(&desc, &origin[fileName], NULL);
 	if (FAILED(result))
 	{
 		//メモリ開放
@@ -269,7 +281,7 @@ HRESULT Sound::LoadWAV(LPDIRECTSOUNDBUFFER *wavData, const char *fileName)
 	DWORD size[2];
 
 	//ロック開始
-	result = (*wavData)->Lock(0, data.cksize, &mem[0], &size[0], &mem[1], &size[1], 0);
+	result = (origin[fileName])->Lock(0, data.cksize, &mem[0], &size[0], &mem[1], &size[1], 0);
 	if (FAILED(result))
 	{
 		//メモリ開放
@@ -289,7 +301,7 @@ HRESULT Sound::LoadWAV(LPDIRECTSOUNDBUFFER *wavData, const char *fileName)
 	}
 
 	//ロック解除
-	(*wavData)->Unlock(mem[0], size[0], mem[1], size[1]);
+	(origin[fileName])->Unlock(mem[0], size[0], mem[1], size[1]);
 
 	//メモリ開放
 	free(header);
@@ -297,29 +309,44 @@ HRESULT Sound::LoadWAV(LPDIRECTSOUNDBUFFER *wavData, const char *fileName)
 	//wavファイルを閉じる
 	mmioClose(handle, 0);
 
+	bgm[index] = origin[fileName];
+
 	return result;
 }
 
 // サウンドの再生
-HRESULT Sound::Play(LPDIRECTSOUNDBUFFER wavData, DWORD type)
+HRESULT Sound::Play(USHORT* index, DWORD type)
 {
 	//再生
-	result = wavData->Play(0, 0, type);
+	result = bgm[index]->Play(0, 0, type);
+	return result;
+}
+
+// サウンドの停止
+HRESULT Sound::Stop(USHORT * index)
+{
+	if (bgm[index] != nullptr)
+	{
+		result = bgm[index]->Stop();
+		if (FAILED(result))
+		{
+			OutputDebugString(_T("\n再生停止：失敗\n"));
+			return result;
+		}
+	}
 
 	return result;
 }
 
-// 処理
-void Sound::UpData(void)
+// サウンドデータの消去
+void Sound::DeleteSoundWAV(USHORT * index)
 {
-	if (input.lock()->InputKey(DIK_SPACE) == TRUE)
+	auto itr = bgm.find(index);
+
+	if (itr != bgm.end())
 	{
-		//ループ再生
-		result = Play(bgm, DSBPLAY_LOOPING);
-		if (FAILED(result))
-		{
-			OutputDebugString(_T("\n再生：失敗\n"));
-			return;
-		}
+		itr->second->Stop();
+		RELEASE(itr->second);
+		bgm.erase(itr);
 	}
 }
