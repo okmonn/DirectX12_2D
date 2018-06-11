@@ -142,7 +142,7 @@ void Player::UpData(void)
 	{
 		SetMode("Walk", true);
 	}
-	else if (in.lock()->InputKey(DIK_SPACE))
+	else if (in.lock()->Trigger(DIK_SPACE))
 	{
 		SetMode("Jump", reverse);
 	}

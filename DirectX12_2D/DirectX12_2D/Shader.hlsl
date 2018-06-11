@@ -36,8 +36,6 @@ Out BasicVS(VSInput input)
 	/*ç¿ïWï‚ê≥
 	pos.xy = float2(-1, 1) + (pos.xy / float2((640 / 2), -(480 / 2)));*/
 
-	//input.pos = mul(mul(viewProjection, world), input.pos);
-
 	Out o;
 	o.svpos     = input.pos;
 	o.pos       = input.pos;

@@ -533,7 +533,7 @@ void Texture::DrawWIC(USHORT* index, Vector2<FLOAT> pos, Vector2<FLOAT> size)
 	wic[index].vertex.vertex[4] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - ((pos.y + size.y) / (FLOAT)(WINDOW_Y / 2)), 0.0f },{ 0.0f, 1.0f } };//左下
 	wic[index].vertex.vertex[5] = { { (pos.x / (FLOAT)(WINDOW_X / 2)) - 1.0f,			   1.0f - (pos.y / (FLOAT)(WINDOW_Y / 2)),			  0.0f },{ 0.0f, 0.0f } };//左上
 
-																																									  //頂点データのコピー
+	//頂点データのコピー
 	memcpy(wic[index].vertex.data, &wic[index].vertex.vertex, (sizeof(wic[index].vertex.vertex)));
 
 	//頂点バッファ設定用構造体の設定

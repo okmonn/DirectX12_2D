@@ -37,8 +37,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	MSG msg = {};
 	USHORT i = 0;
 	USHORT o = 0;
-	s->LoadWAV(&i, "サンプル.wav");
-	s->LoadWAV(&o, "サンプル.wav");
 
 	while (msg.message != WM_QUIT)
 	{
