@@ -29,7 +29,7 @@ Player::Player(std::weak_ptr<Input>in, std::weak_ptr<Texture>tex) : in(in), tex(
 
 	reverse = false;
 
-	Load("アクション/player.act");
+	tex.lock()->LoadWIC(&back, tex.lock()->ChangeUnicode("img/avicii.png"));
 }
 
 // デストラクタ
@@ -86,14 +86,14 @@ void Player::Load(std::string fileName)
 
 	tex.lock()->LoadWIC(&id, tex.lock()->ChangeUnicode(path.c_str()));
 
-	tex.lock()->LoadWIC(&back, tex.lock()->ChangeUnicode("img/splatterhouse.png"));
+	tex.lock()->LoadWIC(&back, tex.lock()->ChangeUnicode("img/avicii.png"));
 }
 
 // 描画
 void Player::Draw(void)
 {
-	UpData();
-	if (data[mode].loop)
+	//UpData();
+	/*if (data[mode].loop)
 	{
 		index = (flam++ / cut[mode][index].flam) % cut[mode].size();
 	}
@@ -118,6 +118,8 @@ void Player::Draw(void)
 		{ (FLOAT)(cut[mode][index].rect.GetRight() - cut[mode][index].rect.GetLeft()) * 2.0f, (FLOAT)(cut[mode][index].rect.GetBottom() - cut[mode][index].rect.GetTop()) * 2.0f },
 		{ (FLOAT)cut[mode][index].rect.GetLeft() , (FLOAT)cut[mode][index].rect.GetTop() },
 		{ (FLOAT)(cut[mode][index].rect.GetRight() - cut[mode][index].rect.GetLeft()), (FLOAT)(cut[mode][index].rect.GetBottom() - cut[mode][index].rect.GetTop()) }, reverse);
+
+	tex.lock()->DrawWIC(&back, { 0.0f, 0.0f }, { (FLOAT)WINDOW_X, (FLOAT)WINDOW_Y });*/
 
 	tex.lock()->DrawWIC(&back, { 0.0f, 0.0f }, { (FLOAT)WINDOW_X, (FLOAT)WINDOW_Y });
 }

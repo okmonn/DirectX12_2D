@@ -75,7 +75,7 @@ void Window::CreateWnd(void)
 	AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, false);
 
 	//ウィンドウ生成
-	windowHandle = CreateWindow(window.lpszClassName, _T("DirectX12"), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, (rect.right - rect.left), (rect.bottom - rect.top), nullptr, nullptr, window.hInstance, nullptr);
+	windowHandle = CreateWindow(window.lpszClassName, _T("1601271_岡繁男"), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, (rect.right - rect.left), (rect.bottom - rect.top), nullptr, nullptr, window.hInstance, nullptr);
 }
 
 // ウィンドウハンドルの取得
